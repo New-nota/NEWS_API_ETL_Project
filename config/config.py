@@ -30,7 +30,7 @@ class Settings:
 
     db_news: str = os.getenv("DB_NEWS","news_db")
 
-    key_api: str = os.getenv("NEWSAPI_KEY", "NO")
+    KEY_API: str = os.getenv("NEWSAPI_KEY", "NO")
     NEWS_URL = "https://newsapi.org/v2/top-headlines"
 
     COUNTRY = "US"
