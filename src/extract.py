@@ -1,10 +1,9 @@
 import requests as r
-from typing import Any
 from config.config import settings
 import make_raw_data as mrd
 from datetime import datetime
 
-def make_request(category: str, hot_pot: str, page: int = 1, page_size: int = 100) -> str:
+def make_extract(category: str, hot_pot: str, page: int = 1, page_size: int = 100) -> str:
     if category not in settings.CATEGORIES:
         raise ValueError(f"Unknown category:{category}. Allowed:{settings.CATEGORIES}")
     params = {

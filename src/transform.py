@@ -9,11 +9,15 @@ def clean_article(data) -> list[dict[str,str]]:
         if element["author"] and element["author"] != '' and element["title"] and element["title"] != '' and element.get("description") and len(element["description"]) >= 20 and element["url"] is not None:
             clean_data.append(
                 {
+                    "country": data["country"],
+                    "category": data["category"],
+                    "key_word": data["key_word"],
                     "author": element["author"],
                     "title": element["title"],
                     "description": element["description"],
                     "url": element["url"],
-                    "publishedAt": element["publishedAt"]
+                    "published_at": element["publishedAt"],
+                    "fetched_at": data["fetched_at"],
                 }
             )
     return clean_data
