@@ -1,7 +1,8 @@
 import requests as r
 from typing import Any
-from config import settings
+from config.config import settings
 import make_raw_data as mrd
+from datetime import datetime
 
 def make_request(category: str, hot_pot: str, page: int = 1, page_size: int = 100) -> dict[str, Any]:
     if category not in settings.CATEGORIES:
@@ -18,6 +19,9 @@ def make_request(category: str, hot_pot: str, page: int = 1, page_size: int = 10
         data = r.get(settings.NEWS_URL, params=params, timeout=15)
         data.raise_for_status()
         payload = data.json()
+        payload["fetched_at"] = datetime.now().isoformat()
+        if payload.get("totalResults", 0) == 0:
+            print("There nothing we can do here")
 
         mrd.import_to_raw_json(payload, category, hot_pot, page)
         return payload
