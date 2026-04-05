@@ -7,7 +7,7 @@ import psycopg2
 from psycopg2 import sql
 from psycopg2.extras import RealDictCursor
 
-from config import settings
+from config.config import settings
 
 @contextmanager
 def get_connection(db_name: str, autocommit: bool = False) -> Iterator:
@@ -73,14 +73,16 @@ def init_database() -> None:
 def create_news_tables() -> None:
     query = """
             CREATE TABLE IF NOT EXISTS bad_news_bears (
+            id BIGSERIAL PRIMARY KEY,
             country VARCHAR NOT NULL,
             category VARCHAR NOT NULL,
             key_word VARCHAR NOT NULL,
-            author VARCHAR NOT NULL,
+            author VARCHAR,
             title TEXT NOT NULL,
-            description TEXT NOT NULL,
+            description TEXT,
             url TEXT UNIQUE  NOT NULL,
-            published_at TIMESTAMP NOT NULL DEFAULT NOW()
+            published_at TIMESTAMP NOT NULL, 
+            fetched_at TIMESTAMP NOT NULL DEFAULT NOW()
             );
             """
     with get_cursor(settings.db_news) as (conn, cur):
