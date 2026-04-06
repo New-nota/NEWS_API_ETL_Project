@@ -34,7 +34,6 @@ class Settings:
     NEWS_URL = "https://newsapi.org/v2/top-headlines"
 
     COUNTRY = "US"
-    CATEGORIES = ["business", "sports", "technology"]
 
 settings = Settings()
     

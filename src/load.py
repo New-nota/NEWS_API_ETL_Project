@@ -30,7 +30,6 @@ def load_news(clean_news:str)-> int:
     
     with get_cursor(settings.db_news) as (conn, cur):
         for new in data:
-            num_of_news += 1
             cur.execute(query, 
                         (new["country"],
                          new["category"],
@@ -41,6 +40,8 @@ def load_news(clean_news:str)-> int:
                          new["url"],
                          new["published_at"],
                          new["fetched_at"]))
+            if cur.rowcount == 1:
+                num_of_news += 1
         conn.commit()
     return num_of_news
             

@@ -1,6 +1,8 @@
 from pathlib import Path
 import json
 from datetime import datetime
+import logging
+logger = logging.getLogger(__name__)
 BASE_DIR = (Path(__file__).resolve().parent.parent)/"data"
 
 def clean_article(data) -> list[dict[str,str]]:
@@ -23,15 +25,17 @@ def clean_article(data) -> list[dict[str,str]]:
     return clean_data
 
 def transform_article(new_file_name:str,category: str, hot_pot: str, page: int) -> str:
-    EXTRACT_DIR = BASE_DIR / "raw" / new_file_name
-    with open(EXTRACT_DIR, 'r', encoding='utf-8') as f:
+    extract_dir = BASE_DIR / "raw" / new_file_name
+    with open(extract_dir, 'r', encoding='utf-8') as f:
         data = json.load(f)
+    logger.info(f"income: {len(data)} articals")
     clean = clean_article(data)
-    LOAD_DIR = BASE_DIR / "clean"
-    LOAD_DIR.mkdir(parents=True, exist_ok=True)
+    load_dir = BASE_DIR / "clean"
+    load_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y_%m_%d-%H-%M-%S")
     create_clean_data = f"cleaned_{category}_{hot_pot}_page_{page}_{timestamp}.json"
-    cleaned_file_path = LOAD_DIR / create_clean_data
+    cleaned_file_path = load_dir / create_clean_data
+    logger.info(f"outcome: {len(clean)} articals")
     with open(cleaned_file_path, "w", encoding='utf-8') as f:
         json.dump(clean, f, ensure_ascii=False, indent=2)
     return create_clean_data
