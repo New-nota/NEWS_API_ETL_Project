@@ -40,13 +40,13 @@ def make_extract(category: str, key_word: str, page: int = 1, page_size: int = 1
         payload["category"] = category
         payload["key_word"] = key_word
         if payload.get("totalResults", 0) == 0:
-            print("There nothing we can do here")
+            logger.info("There no more articles")
 
         new_file_name = import_to_raw_json(payload, category, key_word, page)
         return new_file_name
     
     except r.exceptions.Timeout:
-        print("Error: NewsAPI reauest time out")
+        logger.error("Error: NewsAPI reauest time out")
         raise
     except r.exceptions.ConnectionError:
         logger.error("Error: no internet connection or API is not available")

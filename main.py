@@ -37,7 +37,7 @@ def parse_args():
         help="Amount of news must be aploaded"
     )
     parser.add_argument(
-        "page-size",
+        "page_size",
         type=positive_int,
         default=100,
         help="Amount of articels on 1 page"
@@ -51,7 +51,7 @@ def pipeline() -> None:
     category = args.category
     limit = args.limit
     page_size = args.page_size
-    load_news = 0
+    num_of_news = 0
     page = 1
     while num_of_news < limit:
         raw_file_name = make_extract(category, key_word, page, page_size)
