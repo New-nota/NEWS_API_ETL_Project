@@ -6,8 +6,38 @@ import logging
 logger = logging.getLogger(__name__)
 BASE_DIR = (Path(__file__).resolve().parent.parent)/"data"
 
+def valid_article(element: dict) -> list[str]:
+    reasons = []
+    if not element.get("author"):
+        reasons.append("no_author")
+
+    if not element.get("title"):
+        reasons.append("no_title")
+
+    if not element.get("description"):
+        reasons.append("no_description")
+    elif len(element.get("description")):
+        reasons.append("short_description")
+    
+    if not element.get("url"):
+        reasons.append("no_url")
+    return reasons
+
+
 def clean_article(data) -> list[dict[str,str]]:
     clean_data = []
+    statistic = {
+        "income_articles" : 0,
+        "accepted_articles" : 0,
+        "rejected_articles" : 0,
+        "reasons_counts" :{
+            "no_author":0,
+            "no_title":0,
+            "no_description":0,
+            "short_description":0,
+            "no_url":0
+        }
+    }
     for element in data["articles"]:
         if element["author"] and element["author"] != '' and element["title"] and element["title"] != '' and element.get("description") and len(element["description"]) >= 20 and element["url"] is not None:
             clean_data.append(

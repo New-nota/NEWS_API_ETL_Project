@@ -37,7 +37,7 @@ def parse_args():
         help="Amount of news must be aploaded"
     )
     parser.add_argument(
-        "page_size",
+        "--page_size",
         type=positive_int,
         default=100,
         help="Amount of articels on 1 page"
