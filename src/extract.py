@@ -1,7 +1,24 @@
 import requests as r
 from config.config import settings
-import make_raw_data as mrd
 from datetime import datetime
+from pathlib import Path
+import json
+from typing import Any
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+def import_to_raw_json(data:dict[str, Any], category: str, hot_pot: str, page: int) -> str:
+    NEDD_DIR = BASE_DIR / "data" / "raw"
+    NEDD_DIR.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    create_data = f"{timestamp}_{category}_{hot_pot}_page_{page}.json"
+    file_path = NEDD_DIR / create_data
+    with open(file_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+    return create_data
+
+
 
 def make_extract(category: str, hot_pot: str, page: int = 1, page_size: int = 100) -> str:
     if category not in settings.CATEGORIES:
@@ -25,7 +42,7 @@ def make_extract(category: str, hot_pot: str, page: int = 1, page_size: int = 10
         if payload.get("totalResults", 0) == 0:
             print("There nothing we can do here")
 
-        new_file_name = mrd.import_to_raw_json(payload, category, hot_pot, page)
+        new_file_name = import_to_raw_json(payload, category, hot_pot, page)
         return new_file_name
     
     except r.exceptions.Timeout:
