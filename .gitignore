@@ -3,6 +3,7 @@
 .venv/
 __pycache__/
 *.pyc
-.json
-data/raw/
-data/clean
+data/raw/*
+!data/raw/.gitkeep
+data/clean/*
+!data/clean/.gitkeep

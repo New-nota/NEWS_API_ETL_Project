@@ -24,7 +24,7 @@ def valid_article(element: dict) -> list[str]:
     return reasons
 
 
-def clean_article(data) -> list[dict[str,str]]:
+def clean_article(data) -> tuple[list[dict[str,str]], dict]:
     clean_data = []
     statistic = {
         "income_articles" : 0,
@@ -55,7 +55,7 @@ def clean_article(data) -> list[dict[str,str]]:
                 statistic["reasons_counts"][reason] += 1
             statistic['prime_reason'][reasons[0]] += 1
             continue
-
+        statistic["accepted_articles"] += 1
         clean_data.append(
             {
                 "country": data["country"],
@@ -83,7 +83,9 @@ def transform_article(new_file_name:str,category: str, hot_pot: str, page: int) 
     stats_clean_data = f"stats_{category}_{hot_pot}_page_{page}_{timestamp}.json"
     create_clean_data = f"cleaned_{category}_{hot_pot}_page_{page}_{timestamp}.json"
     cleaned_file_path = load_dir / create_clean_data
-    stats_file_path = load_dir/ "stats" / stats_clean_data
+    stats_dir = load_dir/ "stats" 
+    stats_dir.mkdir(parents=True, exist_ok=True)
+    stats_file_path = stats_dir / stats_clean_data
     logger.info(f"outcome: {len(clean)} articals")
     logger.info("stats collected")
     with open(cleaned_file_path, "w", encoding='utf-8') as f:

@@ -35,8 +35,6 @@ def make_extract(category: str, key_word: str, page: int = 1, page_size: int = 1
         data = r.get(settings.NEWS_URL, params=params, timeout=15)
         data.raise_for_status()
         payload = data.json()
-        logger.info(f"url: {data.url}")
-        logger.info(f"text: {data.text}")
         logger.info(f"raise of status: {data.raise_for_status()}")
         payload["fetched_at"] = datetime.now().isoformat()
         payload["country"] = settings.COUNTRY
