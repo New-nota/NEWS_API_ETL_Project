@@ -1,0 +1,19 @@
+{
+  "income_articles": 4,
+  "accepted_articles": 0,
+  "rejected_articles": 0,
+  "reasons_counts": {
+    "no_author": 0,
+    "no_title": 0,
+    "no_description": 0,
+    "short_description": 0,
+    "no_url": 0
+  },
+  "prime_reason": {
+    "no_author": 0,
+    "no_title": 0,
+    "no_description": 0,
+    "short_description": 0,
+    "no_url": 0
+  }
+}

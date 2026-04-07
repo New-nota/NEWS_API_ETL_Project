@@ -88,7 +88,7 @@ def transform_article(new_file_name:str,category: str, hot_pot: str, page: int) 
     logger.info("stats collected")
     with open(cleaned_file_path, "w", encoding='utf-8') as f:
         json.dump(clean, f, ensure_ascii=False, indent=2)
-    with open(stats_clean_data, 'w', encoding='utf-8') as f:
+    with open(stats_file_path, 'w', encoding='utf-8') as f:
         json.dump(stats,f, ensure_ascii=False, indent=2)
     logger.info("income_articles=%s", stats['income_articles'])
     logger.info("accepted_articles=%s", stats['accepted_articles'])
