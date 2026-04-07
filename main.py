@@ -54,12 +54,14 @@ def pipeline() -> None:
     num_of_news = 0
     page = 1
     while num_of_news < limit:
-        raw_file_name = make_extract(category, key_word, page, page_size)
-        clean_file_name = transform_article(raw_file_name, category, key_word, page)
-        result_num_of_news = load_news(clean_file_name)
-        if result_num_of_news == 0:
+        remaining = limit - num_of_news
+        raw_file_name,raw_articles_count = make_extract(category, key_word, page, page_size)
+        if raw_articles_count == 0:
             logger.warning("there is no more artical")
             break
+        clean_file_name = transform_article(raw_file_name, category, key_word, page)
+        result_num_of_news = load_news(clean_file_name, max_rows=remaining)
+        
         num_of_news += result_num_of_news
         page += 1
     logger.info(f"{num_of_news} news on category {category} already aploaded")

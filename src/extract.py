@@ -15,6 +15,7 @@ def import_to_raw_json(data:dict[str, Any], category: str, key_word: str, page: 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     create_data = f"{timestamp}_{category}_{key_word}_page_{page}.json"
     file_path = raw_dir / create_data
+
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
@@ -22,7 +23,7 @@ def import_to_raw_json(data:dict[str, Any], category: str, key_word: str, page: 
 
 
 
-def make_extract(category: str, key_word: str, page: int = 1, page_size: int = 100) -> str:
+def make_extract(category: str, key_word: str, page: int = 1, page_size: int = 100) -> tuple[str,int]:
     params = {
     "apiKey": settings.KEY_API,
     "country":settings.COUNTRY,
@@ -33,18 +34,18 @@ def make_extract(category: str, key_word: str, page: int = 1, page_size: int = 1
     }
     try:
         data = r.get(settings.NEWS_URL, params=params, timeout=15)
-        data.raise_for_status()
         payload = data.json()
         logger.info(f"raise of status: {data.raise_for_status()}")
         payload["fetched_at"] = datetime.now().isoformat()
         payload["country"] = settings.COUNTRY
         payload["category"] = category
         payload["key_word"] = key_word
-        if payload.get("totalResults", 0) == 0:
-            logger.info("There no more articles")
+        articles_count = len(payload.get("articles", []))
+        if articles_count == 0:
+            logger.info("There are no more articles")
 
         new_file_name = import_to_raw_json(payload, category, key_word, page)
-        return new_file_name
+        return new_file_name, articles_count
     
     except r.exceptions.Timeout:
         logger.error("Error: NewsAPI reauest time out")
