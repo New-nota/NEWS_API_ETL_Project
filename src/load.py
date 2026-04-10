@@ -15,8 +15,7 @@ def load_news(clean_news:str, max_rows: Optional[int] = None)-> int:
     
     query = """
             INSERT INTO bad_news_bears (
-            country, 
-            category, 
+            language, 
             key_word, 
             author, 
             title, 
@@ -25,7 +24,7 @@ def load_news(clean_news:str, max_rows: Optional[int] = None)-> int:
             published_at,
             fetched_at
             )
-            VALUES (%s, %s, %s, %s,%s, %s, %s, %s,%s)
+            VALUES (%s, %s, %s,%s, %s, %s, %s,%s)
             ON CONFLICT (url) DO NOTHING
             """
     
@@ -34,8 +33,7 @@ def load_news(clean_news:str, max_rows: Optional[int] = None)-> int:
             if max_rows is not None and num_of_news >= max_rows:
                 break
             cur.execute(query, 
-                        (new["country"],
-                         new["category"],
+                        (new["language"],
                          new["key_word"],
                          new["author"],
                          new["title"],

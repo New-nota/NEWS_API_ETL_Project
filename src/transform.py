@@ -58,8 +58,7 @@ def clean_article(data) -> tuple[list[dict[str,str]], dict]:
         statistic["accepted_articles"] += 1
         clean_data.append(
             {
-                "country": data["country"],
-                "category": data["category"],
+                "language": data["language"],
                 "key_word": data["key_word"],
                 "author": element["author"],
                 "title": element["title"],
@@ -71,7 +70,7 @@ def clean_article(data) -> tuple[list[dict[str,str]], dict]:
         )
     return clean_data, statistic
 
-def transform_article(new_file_name:str,category: str, hot_pot: str, page: int) -> str:
+def transform_article(new_file_name:str, key_word: str, page: int) -> str:
     extract_dir = BASE_DIR / "raw" / new_file_name
     with open(extract_dir, 'r', encoding='utf-8') as f:
         data = json.load(f)
@@ -80,8 +79,8 @@ def transform_article(new_file_name:str,category: str, hot_pot: str, page: int) 
     load_dir = BASE_DIR / "clean"
     load_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y_%m_%d-%H-%M-%S")
-    stats_clean_data = f"stats_{category}_{hot_pot}_page_{page}_{timestamp}.json"
-    create_clean_data = f"cleaned_{category}_{hot_pot}_page_{page}_{timestamp}.json"
+    stats_clean_data = f"stats_{key_word}_page_{page}_{timestamp}.json"
+    create_clean_data = f"cleaned_{key_word}_page_{page}_{timestamp}.json"
     cleaned_file_path = load_dir / create_clean_data
     stats_dir = load_dir/ "stats" 
     stats_dir.mkdir(parents=True, exist_ok=True)

@@ -74,8 +74,7 @@ def create_news_tables() -> None:
     query = """
             CREATE TABLE IF NOT EXISTS bad_news_bears (
             id BIGSERIAL PRIMARY KEY,
-            country VARCHAR NOT NULL,
-            category VARCHAR NOT NULL,
+            language VARCHAR NOT NULL,
             key_word VARCHAR NOT NULL,
             author VARCHAR,
             title TEXT NOT NULL,

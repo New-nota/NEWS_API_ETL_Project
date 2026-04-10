@@ -9,11 +9,11 @@ import logging
 logger = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-def import_to_raw_json(data:dict[str, Any], category: str, key_word: str, page: int) -> str:
+def import_to_raw_json(data:dict[str, Any], key_word: str, page: int) -> str:
     raw_dir = BASE_DIR / "data" / "raw"
     raw_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    create_data = f"{timestamp}_{category}_{key_word}_page_{page}.json"
+    create_data = f"{timestamp}_{key_word}_page_{page}.json"
     file_path = raw_dir / create_data
 
     with open(file_path, "w", encoding="utf-8") as f:
@@ -23,14 +23,14 @@ def import_to_raw_json(data:dict[str, Any], category: str, key_word: str, page: 
 
 
 
-def make_extract(category: str, key_word: str, page: int = 1, page_size: int = 100) -> tuple[str,int]:
+def make_extract( key_word: str, page: int = 1, page_size: int = 100) -> tuple[str,int]:
     params = {
     "apiKey": settings.KEY_API,
-    "country":settings.COUNTRY,
-    "category":category,
+    "language":settings.langueage,
     "q": key_word,
     "pageSize" : page_size,
-    "page" : page
+    "page" : page,
+    "sortBy": settings.sortBy
     }
     try:
         data = r.get(settings.NEWS_URL, params=params, timeout=15)
@@ -38,14 +38,13 @@ def make_extract(category: str, key_word: str, page: int = 1, page_size: int = 1
         payload = data.json()
         logger.info(f"raise of status: {data.status_code}")
         payload["fetched_at"] = datetime.now().isoformat()
-        payload["country"] = settings.COUNTRY
-        payload["category"] = category
+        payload["language"] = settings.langueage
         payload["key_word"] = key_word
         articles_count = len(payload.get("articles", []))
         if articles_count == 0:
             logger.info("There are no more articles")
 
-        new_file_name = import_to_raw_json(payload, category, key_word, page)
+        new_file_name = import_to_raw_json(payload, key_word, page)
         return new_file_name, articles_count
     
     except r.exceptions.Timeout:
