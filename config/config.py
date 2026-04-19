@@ -29,12 +29,7 @@ class Settings:
     db_admin_db: str = os.getenv("DB_ADMIN_DB", "postgres")
 
     db_news: str = os.getenv("DB_NEWS","news_db")
-    db_app_users: str = os.getenv("DB_APP_USERS", "db_app_users")
-    db_search_requests: str = os.getenv("DB_SEARCH_REQUESTS", "DB_SEARCH_REQUESTS")
-    db_articles: str = os.getenv("DB_ARTICLES", "db_articles")
-    db_user_news: str = os.getenv("DB_USER_NEWS", "db_user_news")
-    db_request_stats: str = os.getenv("DB_REQUEST_STATS", "db_request_stats")
-    
+
 
     KEY_API: str = os.getenv("NEWSAPI_KEY", "NO")
     NEWS_URL = "https://newsapi.org/v2/everything"
