@@ -70,7 +70,7 @@ copy .env.example .env
 
 #### запустить код
 ```bash
-python main.py --keyword your_key_word --category your_category --limit your_articles_limit --page_size your_page_size
+python main.py --keyword your_key_word --limit your_articles_limit --page_size your_page_size
 ```
 
 ### пример .env

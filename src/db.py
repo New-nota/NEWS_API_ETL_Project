@@ -70,6 +70,92 @@ def create_database_if_not_exists(db_name: str) -> None:
 def init_database() -> None:
     create_database_if_not_exists(settings.db_news)
 
+def create_search_requests_table() -> None:
+    query = """
+            CEATE TABLE IF NOT EXISTS search_requests (
+            id BIGSERIAL PRIMARY KEY,
+            user_id BIGINT NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+            keyword TEXT NOT NULL,
+            language VARCHAR(10) NOT NULL DEFAULT 'ru',
+            limit_count INTEGER NOT NULL CHECK (limit_count > 0),
+            page_size INTEGER NOT NULL CHECK (page_size > 0),
+            status VARCHAR(20) NOT NULL, CHECK (status IN ('queued', 'running', 'success', 'failed')),
+            error_text TEXT,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            stated_at TIMESTAMP,
+            finished_at TIMESTAMP
+            );
+        """
+    with get_cursor(settings.db_search_requests) as (conn, cur):
+        cur.execute(query)
+        conn.commit()
+
+def create_articles_table() -> None:
+    query = """
+            CEATE TABLE IF NOT EXISTS articles (
+            id BIGSERIAL PRIMARY KEY,
+            url TEXT NOT NULL UNIQUE,
+            source_name TEXT,
+            author TEXT,
+            title TEXT NOT NULL,
+            description TEXT,
+            published_at TIMESTAMP NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW()
+            );
+        """
+    with get_cursor(settings.db_articles) as (conn, cur):
+        cur.execute(query)
+        conn.commit()
+
+def create_user_news_table() -> None:
+    query = """
+            CEATE TABLE IF NOT EXISTS user_news (
+            id BIGSERIAL PRIMARY KEY,
+            user_id BIGINT NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+            search_request_id BIGINT NOT NULL REFERENCES search_requests(id) ON DELETE CASCADE,
+            article_id BIGINT NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+            keyword TEXT NOT NULL,
+            fetched_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            UNIQUE (user_id, article_id, search_request_id)
+            );
+        """
+    with get_cursor(settings.db_user_news) as (conn, cur):
+        cur.execute(query)
+        conn.commit()
+
+def create_request_stats_table() -> None:
+    query = """
+            CEATE TABLE IF NOT EXISTS request_stats (
+            id BIGSERIAL PRIMARY KEY,
+            search_request_id BIGINT NOT NULL REFERENCES search_requests(id) ON DELETE CASCADE,
+            income_articles INTEGER NOT NULL DEFAULT 0,
+            accepted_articles INTEGER NOT NULL DEFAULT 0,
+            rejected_articles INTEGER NOT NULL DEFAULT 0,
+            reasons_counts JSONB NOUT NULL DEFAULT '{}'::jsonb,
+            prime_reasons JSONB NOUT NULL DEFAULT '{}'::jsonb,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW()
+            );
+        """
+    with get_cursor(settings.db_request_stats) as (conn, cur):
+        cur.execute(query)
+        conn.commit()
+
+def create_app_users_table() -> None:
+    query = """
+            CEATE TABLE IF NOT EXISTS app_users (
+            id BIGSERIAL PRIMARY KEY,
+            google_sub TEXT NOT NULL UNIQOE,
+            email TEXT NOT NULL UNIQUE,
+            name TEXT,
+            image_url TEXT,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            last_login_at TIMESTAMP NOT NULL DEFAULT NOW()
+            );
+        """
+    with get_cursor(settings.db_app_users) as (conn, cur):
+        cur.execute(query)
+        conn.commit()
+                
 def create_news_tables() -> None:
     query = """
             CREATE TABLE IF NOT EXISTS bad_news_bears (
