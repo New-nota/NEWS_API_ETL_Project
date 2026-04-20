@@ -1,5 +1,5 @@
 import argparse
-from src import make_extract, transform_article_debug, transform_article_web, load_news, init_database, create_news_tables
+from src import make_extract, transform_article_debug, transform_article_web, load_news, init_database, create_news_tables, load_web_pipeline, make_extract_web, make_extract_debug
 import logging
 
 logging.basicConfig(
@@ -54,19 +54,19 @@ def pipeline_for_web_user(user_id: int, search_request_id: int, key_word: str, l
     while num_of_news < limit:
         remaining = limit - num_of_news
         if debug:
-            raw_file_name, raw_articles_count = make_extract(key_word, page, page_size)
+            raw_file_name, raw_articles_count = make_extract_debug(key_word, page, page_size)
             if raw_articles_count == 0:
                 logger.warning("there is no more artical")
                 break
             clean_file_name = transform_article_debug(raw_file_name, key_word, page)
             result_num_of_news = load_news(clean_file_name, max_rows=remaining)
-
-        payload, raw_articles_count = make_extract(key_word, page, page_size)
-        if raw_articles_count == 0:
-            logger.warning("there is no more artical")
-            break
-        clean_file_name = transform_article_web(payload, key_word, page)
-        result_num_of_news = load_news(clean_file_name, max_rows=remaining)
+        else:
+            payload, raw_articles_count = make_extract_web(key_word, page, page_size)
+            if raw_articles_count == 0:
+                logger.warning("there is no more artical")
+                break
+            clean_data, stats = transform_article_web(payload)
+            result_num_of_news = load_web_pipeline(user_id, search_request_id, clean_data, stats)
         
         num_of_news += result_num_of_news
         page += 1
@@ -78,23 +78,11 @@ def main()-> None:
     try:
         init_database()
         create_news_tables()
-        loaded = pipeline()
+        loaded = pipeline_for_web_user()
         logger.info("Pipline finished. loaded rows: %s", loaded)
     except Exception as e:
         logger.exception("pipeline failed: %s", e)
         raise
-
-def main2(user_id, search_request_id, key_word)-> None:
-    logger.info("Starting pipeline, init database, build table..")
-    try:
-        init_database()
-        create_news_tables()
-        loaded = pipeline_for_web_user(user_id,search_request_id, key_word, 20, 50)
-        logger.info("Pipline finished. loaded rows: %s", loaded)
-    except Exception as e:
-        logger.exception("pipeline failed: %s", e)
-        raise
-
 
 if __name__ == "__main__":
     main()

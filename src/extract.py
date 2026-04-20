@@ -23,7 +23,7 @@ def import_to_raw_json(data:dict[str, Any], key_word: str, page: int) -> str:
 
 
 
-def make_extract( key_word: str, page: int = 1, page_size: int = 100, debug_mode: bool = False) -> tuple[dict,int]:
+def make_extract_debug( key_word: str, page: int = 1, page_size: int = 100) -> str:
     params = {
     "apiKey": settings.KEY_API,
     "language":settings.langueage,
@@ -43,11 +43,42 @@ def make_extract( key_word: str, page: int = 1, page_size: int = 100, debug_mode
         articles_count = len(payload.get("articles", []))
         if articles_count == 0:
             logger.info("There are no more articles")
-        if debug_mode:
-            new_file_name = import_to_raw_json(payload, key_word, page)
-            return new_file_name, articles_count
+        new_file_name = import_to_raw_json(payload, key_word, page)
+        return new_file_name, articles_count
+    except r.exceptions.Timeout:
+        logger.error("Error: NewsAPI reauest time out")
+        raise
+    except r.exceptions.ConnectionError:
+        logger.error("Error: no internet connection or API is not available")
+        raise
+    except r.exceptions.HTTPError as e:
+        logger.error(f"Error HTTP: {e}")
+        raise
+    except ValueError:
+        logger.error("Error: sorry we can't parse JSON")
+        raise
+
+def make_extract_web( key_word: str, page: int = 1, page_size: int = 100) -> tuple[dict,int]:
+    params = {
+    "apiKey": settings.KEY_API,
+    "language":settings.langueage,
+    "q": key_word,
+    "pageSize" : page_size,
+    "page" : page,
+    "sortBy": settings.sortBy
+    }
+    try:
+        data = r.get(settings.NEWS_URL, params=params, timeout=15)
+        data.raise_for_status()
+        payload = data.json()
+        logger.info(f"raise of status: {data.status_code}")
+        payload["fetched_at"] = datetime.now().isoformat()
+        payload["language"] = settings.langueage
+        payload["key_word"] = key_word
+        articles_count = len(payload.get("articles", []))
+        if articles_count == 0:
+            logger.info("There are no more articles")
         return payload, articles_count
-    
     except r.exceptions.Timeout:
         logger.error("Error: NewsAPI reauest time out")
         raise

@@ -45,4 +45,88 @@ def load_news(clean_news:str, max_rows: Optional[int] = None)-> int:
                 num_of_news += 1
         conn.commit()
     return num_of_news
+
+def upsert_article(cur, article: dict) -> int:
+    query = """
+            INSERT INTO articles (
+            url,
+            source_name,
+            author,
+            title,
+            description,
+            published_at
+            )
+            VALUES (%s,%s,%s,%s,%s,%s)
+            ON CONFLICT (url) DO UPDATE
+            SET
+                source_name = EXCLUDED.source_name,
+                author = EXCLUDED.author,
+                title = EXCLUDED.title,
+                description = EXCLUDED.description,
+                published_at = EXCLUDED.published_at
+            RETURNING id;
+            """
+    cur.execute(query,
+                ( 
+                    article["url"], 
+                    article["source_name"], 
+                    article["author"], 
+                    article["title"],
+                    article["description"],
+                    article["published_at"],
+                ),
+                )
+    row = cur.fetchone()
+    return row["id"]
+
             
+def load_user_news(cur, user_id: int, search_request_id: int, article_id: int, keyword: str, fetched_at: str)-> int:
+    query = """
+            INSERT INTO user_news (
+            user_id,
+            search_request_id,
+            article_id,
+            keyword,
+            fetched_at
+            )
+            values(%s,%s,%s,%s,%s)
+            ON CONFLICT DO NOTHING;
+            """
+    cur.execute(query,(user_id, search_request_id, article_id, keyword, fetched_at))
+    return cur.rowcount
+
+def load_request_stats(cur, search_request_id: int, stats: dict) -> None:
+    query = """
+            INSERT INTO request_stats (
+            search_request_id,
+            income_articles,
+            accepted_articles,
+            rejected_articles,
+            reasons_counts,
+            prime_reason
+            )
+            VALUES (%s,%s,%s,%s,%s,%s)
+            """
+    cur.execute(query, (
+            search_request_id,
+            stats["income_articles"],
+            stats["accepted_articles"],
+            stats["rejected_articles"],
+            json.dumps(stats["reasons_counts"]),
+            json.dumps(stats["prime_reason"])
+        ))
+    return None
+
+def load_web_pipeline(user_id: int, search_request_id: int, clean_data: list[dict], stats: dict) -> int:
+    loaded_count = 0
+    with get_cursor(settings.db_news) as (conn, cur):
+        for article in clean_data:
+            keyword = article["key_word"]
+            fetched_at = article["fetched_at"]
+            article_id = upsert_article(cur,article)
+            inserted = load_user_news(cur, user_id, search_request_id, article_id, keyword, fetched_at)
+            loaded_count += inserted   
+        load_request_stats(cur, search_request_id, stats)
+        conn.commit()
+    return loaded_count
+
