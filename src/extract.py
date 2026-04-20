@@ -23,7 +23,7 @@ def import_to_raw_json(data:dict[str, Any], key_word: str, page: int) -> str:
 
 
 
-def make_extract( key_word: str, page: int = 1, page_size: int = 100) -> tuple[str,int]:
+def make_extract( key_word: str, page: int = 1, page_size: int = 100, debug_mode: bool = False) -> tuple[dict,int]:
     params = {
     "apiKey": settings.KEY_API,
     "language":settings.langueage,
@@ -43,9 +43,10 @@ def make_extract( key_word: str, page: int = 1, page_size: int = 100) -> tuple[s
         articles_count = len(payload.get("articles", []))
         if articles_count == 0:
             logger.info("There are no more articles")
-
-        new_file_name = import_to_raw_json(payload, key_word, page)
-        return new_file_name, articles_count
+        if debug_mode:
+            new_file_name = import_to_raw_json(payload, key_word, page)
+            return new_file_name, articles_count
+        return payload, articles_count
     
     except r.exceptions.Timeout:
         logger.error("Error: NewsAPI reauest time out")

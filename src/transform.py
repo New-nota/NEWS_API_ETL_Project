@@ -66,11 +66,12 @@ def clean_article(data) -> tuple[list[dict[str,str]], dict]:
                 "url": element["url"],
                 "published_at": element["publishedAt"],
                 "fetched_at": data["fetched_at"],
+                "source_name": element.get("source", {}).get("name")
             }
         )
     return clean_data, statistic
 
-def transform_article(new_file_name:str, key_word: str, page: int) -> str:
+def transform_article_debug(new_file_name:str, key_word: str, page: int) -> str:
     extract_dir = BASE_DIR / "raw" / new_file_name
     with open(extract_dir, 'r', encoding='utf-8') as f:
         data = json.load(f)
@@ -97,3 +98,15 @@ def transform_article(new_file_name:str, key_word: str, page: int) -> str:
     logger.info("reasons_counts=%s", stats['reasons_counts'])
     logger.info("prime_reason=%s", stats['prime_reason'])
     return create_clean_data
+
+def transform_article_web(payload:dict)-> tuple[list[dict],dict]:
+    logger.info(f"income: {len(payload.get('articles', []))} articals")
+    clean, stats = clean_article(payload)
+    logger.info(f"outcome: {len(clean)} articals")
+    logger.info("stats collected")
+    logger.info("income_articles=%s", stats['income_articles'])
+    logger.info("accepted_articles=%s", stats['accepted_articles'])
+    logger.info("rejected_articles=%s", stats['rejected_articles'])
+    logger.info("reasons_counts=%s", stats['reasons_counts'])
+    logger.info("prime_reason=%s", stats['prime_reason'])
+    return clean, stats
