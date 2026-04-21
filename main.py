@@ -60,7 +60,7 @@ def parse_args():
         default=1
         )
     parser.add_argument(
-        "--serch_request_id",
+        "--search_request_id",
         type=int,
         default=1
     )
@@ -69,10 +69,10 @@ def parse_args():
 def init_all_tables(debug: bool) -> None:
     init_database()
     create_app_users_table()
-    create_articles_table()
-    create_request_stats_table()
     create_search_requests_table()
+    create_articles_table()
     create_user_news_table()
+    create_request_stats_table()
     if debug:
         create_news_tables()
 
@@ -85,7 +85,7 @@ def main()-> None:
         if args.debug:
             loaded = run_debug_pipeline(args.keyword, args.limit, args.page_size)
         else:
-            loaded = run_pipeline_for_web_user(args.user_id, args.search_request_id, args.ketword, args.limit, args.page_size)
+            loaded = run_pipeline_for_web_user(args.user_id, args.search_request_id, args.keyword, args.limit, args.page_size)
         logger.info("Pipline finished. loaded rows: %s", loaded)
     except Exception as e:
         logger.exception("pipeline failed: %s", e)

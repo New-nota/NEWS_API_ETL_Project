@@ -5,6 +5,7 @@ from config.config import settings
 from typing import Optional
 BASE_DIR = (Path(__file__).resolve().parent.parent)/"data"/"clean"
 
+    
 def load_news(clean_news:str, max_rows: Optional[int] = None)-> int:
     LOAD_DIR = BASE_DIR/clean_news
     num_of_news = 0
@@ -95,7 +96,7 @@ def load_user_news(cur, user_id: int, search_request_id: int, article_id: int, k
     cur.execute(query,(user_id, search_request_id, article_id, keyword, fetched_at))
     return cur.rowcount
 
-def load_request_stats(cur, search_request_id: int, stats: dict) -> None:
+def load_request_stats(search_request_id: int, stats: dict) -> None:
     query = """
             INSERT INTO request_stats (
             search_request_id,
@@ -103,11 +104,20 @@ def load_request_stats(cur, search_request_id: int, stats: dict) -> None:
             accepted_articles,
             rejected_articles,
             reasons_counts,
-            prime_reason
+            prime_reasons
             )
             VALUES (%s,%s,%s,%s,%s,%s)
+            ON CONFLICT (search_request_id) DO UPDATE
+            SET
+                income_articles = EXCLUDED.income_articles,
+                accepted_articles = EXCLUDED.accepted_articles,
+                rejected_articles = EXCLUDED.rejected_articles,
+                reasons_counts = EXCLUDED.reasons_counts,
+                prime_reasons = EXCLUDED.prime_reasons
             """
-    cur.execute(query, (
+    
+    with get_cursor(settings.db_news) as (conn, cur):
+        cur.execute(query, (
             search_request_id,
             stats["income_articles"],
             stats["accepted_articles"],
@@ -115,9 +125,10 @@ def load_request_stats(cur, search_request_id: int, stats: dict) -> None:
             json.dumps(stats["reasons_counts"]),
             json.dumps(stats["prime_reason"])
         ))
-    return None
+        conn.commit()
 
-def load_web_pipeline(user_id: int, search_request_id: int, clean_data: list[dict], stats: dict) -> int:
+
+def load_web_pipeline(user_id: int, search_request_id: int, clean_data: list[dict]) -> int:
     loaded_count = 0
     with get_cursor(settings.db_news) as (conn, cur):
         for article in clean_data:
@@ -126,7 +137,6 @@ def load_web_pipeline(user_id: int, search_request_id: int, clean_data: list[dic
             article_id = upsert_article(cur,article)
             inserted = load_user_news(cur, user_id, search_request_id, article_id, keyword, fetched_at)
             loaded_count += inserted   
-        load_request_stats(cur, search_request_id, stats)
         conn.commit()
     return loaded_count
 

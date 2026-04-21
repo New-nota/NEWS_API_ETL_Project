@@ -46,7 +46,7 @@ def mark_as_success(search_request_id: int) -> None:
 def mark_as_error(search_request_id: int, error_text: str) -> None:
     query = """UPDATE search_requests
                 SET
-                status = 'ERROR',
+                status = 'failed',
                 finished_at = NOW(),
                 error_text = %s
                 WHERE id = %s"""
@@ -74,7 +74,7 @@ def one_request() -> bool:
         logger.info(f"pushed {amount_of_articles} articles")
     except Exception as e:
         logger.exception(f"Pipeline for {user_id} on {search_request_id} by {keyword} failed: {e}")
-        mark_as_error(search_request_id, e)
+        mark_as_error(search_request_id, str(e))
     return True
 
 def run_worker_loop(pull_interval: int = 3) -> None:
