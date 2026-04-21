@@ -1,6 +1,17 @@
 import argparse
-from src import make_extract, transform_article_debug, transform_article_web, load_news, init_database, create_news_tables, load_web_pipeline, make_extract_web, make_extract_debug
 import logging
+
+from src import (
+    init_database,
+    create_app_users_table,
+    create_search_requests_table,
+    create_articles_table,
+    create_user_news_table,
+    create_request_stats_table,
+    create_news_tables,
+    run_pipeline_for_web_user, 
+    run_debug_pipeline
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -39,46 +50,42 @@ def parse_args():
         help="Amount of articels on 1 page"
 
     )
+    parser.add_argument(
+        "--debug",
+        action="store_true"
+    )
+    parser.add_argument(
+        "--user_id", 
+        type=int,
+        default=1
+        )
+    parser.add_argument(
+        "--serch_request_id",
+        type=int,
+        default=1
+    )
     return parser.parse_args()
 
-def pipeline_for_web_user(user_id: int, search_request_id: int, key_word: str, limit: int, page_size: int, debug:bool = False) -> int:
+def init_all_tables(debug: bool) -> None:
+    init_database()
+    create_app_users_table()
+    create_articles_table()
+    create_request_stats_table()
+    create_search_requests_table()
+    create_user_news_table()
     if debug:
-        args = parse_args()
-        key_word = args.keyword
-        limit = args.limit
-        page_size = args.page_size
-        user_id = 1
-        search_request_id = 1
-    num_of_news = 0
-    page = 1
-    while num_of_news < limit:
-        remaining = limit - num_of_news
-        if debug:
-            raw_file_name, raw_articles_count = make_extract_debug(key_word, page, page_size)
-            if raw_articles_count == 0:
-                logger.warning("there is no more artical")
-                break
-            clean_file_name = transform_article_debug(raw_file_name, key_word, page)
-            result_num_of_news = load_news(clean_file_name, max_rows=remaining)
-        else:
-            payload, raw_articles_count = make_extract_web(key_word, page, page_size)
-            if raw_articles_count == 0:
-                logger.warning("there is no more artical")
-                break
-            clean_data, stats = transform_article_web(payload)
-            result_num_of_news = load_web_pipeline(user_id, search_request_id, clean_data, stats)
-        
-        num_of_news += result_num_of_news
-        page += 1
-    logger.info(f"{num_of_news} news on key word {key_word} already aploaded")
-    return num_of_news
+        create_news_tables()
+
 
 def main()-> None:
+    args = parse_args()
     logger.info("Starting pipeline, init database, build table..")
     try:
-        init_database()
-        create_news_tables()
-        loaded = pipeline_for_web_user()
+        init_all_tables(debug=args.debug)
+        if args.debug:
+            loaded = run_debug_pipeline(args.keyword, args.limit, args.page_size)
+        else:
+            loaded = run_pipeline_for_web_user(args.user_id, args.search_request_id, args.ketword, args.limit, args.page_size)
         logger.info("Pipline finished. loaded rows: %s", loaded)
     except Exception as e:
         logger.exception("pipeline failed: %s", e)

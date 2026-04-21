@@ -23,7 +23,7 @@ def import_to_raw_json(data:dict[str, Any], key_word: str, page: int) -> str:
 
 
 
-def make_extract_debug( key_word: str, page: int = 1, page_size: int = 100) -> str:
+def make_extract_debug( key_word: str, page: int = 1, page_size: int = 100) -> tuple[str, int]:
     params = {
     "apiKey": settings.KEY_API,
     "language":settings.langueage,
