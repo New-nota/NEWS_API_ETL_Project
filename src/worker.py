@@ -63,11 +63,12 @@ def one_request() -> bool:
     keyword = request_row["keyword"]
     limit_count = request_row["limit_count"]
     page_size = request_row["page_size"]
+    language = request_row["language"]
     logger.info(f"Pipeline starts for {user_id} on {search_request_id} by keyword {keyword}")
     mark_as_running(search_request_id)
 
     try:
-        amount_of_articles = run_pipeline_for_web_user(user_id, search_request_id, keyword, limit_count, page_size)
+        amount_of_articles = run_pipeline_for_web_user(user_id, search_request_id, keyword, limit_count, page_size, language=language)
 
         mark_as_success(search_request_id)
         logger.info(f"Pipeline finished successfully for {user_id} on {search_request_id} by {keyword}")

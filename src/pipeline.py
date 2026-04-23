@@ -41,12 +41,12 @@ def merge_stats(stats: dict, page_stats: dict)-> None:
     for k,v in page_stats["prime_reason"].items():
         stats["prime_reason"][k] += v
 
-def run_pipeline_for_web_user(user_id: int, search_request_id: int, key_word: str, limit: int, page_size: int) -> int:
+def run_pipeline_for_web_user(user_id: int, search_request_id: int, key_word: str, limit: int, page_size: int, language:str = "ru") -> int:
     statistic = make_empty_stats()
     num_of_news = 0
     page = 1
     while num_of_news < limit:
-        payload, raw_articles_count = make_extract_web(key_word, page, page_size)
+        payload, raw_articles_count = make_extract_web(key_word, page, page_size, language)
         if raw_articles_count == 0:
             logger.warning("there is no more artical")
             break
@@ -59,12 +59,12 @@ def run_pipeline_for_web_user(user_id: int, search_request_id: int, key_word: st
     logger.info(f"{num_of_news} news on key word {key_word} already aploaded")
     return num_of_news
 
-def run_debug_pipeline(keyword: str, limit:int, page_size: int) -> int:
+def run_debug_pipeline(keyword: str, limit:int, page_size: int, language: str = "ru") -> int:
     num_of_news = 0
     page = 1
     while num_of_news < limit:
         max_rows = limit - num_of_news
-        new_file_name, raw_articles_count = make_extract_debug(keyword, page, page_size)
+        new_file_name, raw_articles_count = make_extract_debug(keyword, page, page_size, language)
         if raw_articles_count == 0:
             logger.warning("there is no more artical")
             break

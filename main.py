@@ -64,6 +64,11 @@ def parse_args():
         type=int,
         default=1
     )
+    parser.add_argument(
+        "--language",
+        type=str,
+        default="ru"
+    )
     return parser.parse_args()
 
 def init_all_tables(debug: bool) -> None:

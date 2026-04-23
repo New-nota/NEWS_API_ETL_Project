@@ -23,10 +23,10 @@ def import_to_raw_json(data:dict[str, Any], key_word: str, page: int) -> str:
 
 
 
-def make_extract_debug( key_word: str, page: int = 1, page_size: int = 100) -> tuple[str, int]:
+def make_extract_debug( key_word: str, page: int = 1, page_size: int = 100, language: str = "ru") -> tuple[str, int]:
     params = {
     "apiKey": settings.KEY_API,
-    "language":settings.langueage,
+    "language":language,
     "q": key_word,
     "pageSize" : page_size,
     "page" : page,
@@ -38,7 +38,7 @@ def make_extract_debug( key_word: str, page: int = 1, page_size: int = 100) -> t
         payload = data.json()
         logger.info(f"raise of status: {data.status_code}")
         payload["fetched_at"] = datetime.now().isoformat()
-        payload["language"] = settings.langueage
+        payload["language"] = language
         payload["key_word"] = key_word
         articles_count = len(payload.get("articles", []))
         if articles_count == 0:
@@ -58,10 +58,10 @@ def make_extract_debug( key_word: str, page: int = 1, page_size: int = 100) -> t
         logger.error("Error: sorry we can't parse JSON")
         raise
 
-def make_extract_web( key_word: str, page: int = 1, page_size: int = 100) -> tuple[dict,int]:
+def make_extract_web( key_word: str, page: int = 1, page_size: int = 100, language:str = "ru") -> tuple[dict,int]:
     params = {
     "apiKey": settings.KEY_API,
-    "language":settings.langueage,
+    "language":language,
     "q": key_word,
     "pageSize" : page_size,
     "page" : page,
@@ -73,7 +73,7 @@ def make_extract_web( key_word: str, page: int = 1, page_size: int = 100) -> tup
         payload = data.json()
         logger.info(f"raise of status: {data.status_code}")
         payload["fetched_at"] = datetime.now().isoformat()
-        payload["language"] = settings.langueage
+        payload["language"] = language
         payload["key_word"] = key_word
         articles_count = len(payload.get("articles", []))
         if articles_count == 0:
