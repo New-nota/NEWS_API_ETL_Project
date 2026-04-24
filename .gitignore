@@ -1,8 +1,13 @@
-.env
+﻿.env
 .vscode/
 .venv/
 __pycache__/
 *.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Generated ETL artifacts
 data/raw/*
 !data/raw/.gitkeep
 data/clean/*

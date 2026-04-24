@@ -1,92 +1,113 @@
-# NEWS_API_ETL_Project
+﻿# NEWS_API_ETL_Project
 
-### Цель
-Обрабатывать из внешнего API новости и используя принцип ETL сохранять нужные новости в базу данных.
+Production-oriented ETL pipeline that collects articles from NewsAPI, validates/transforms them, and loads clean records into PostgreSQL.
 
-### Стек
-Extract: requests(страна, категория, ключевое слово, размер страницы (опционально)) -> сохранение статей в папку data/raw
+## What this project does
+1. `extract`: gets paginated articles from NewsAPI with timeout, retries, and backoff.
+2. `transform`: validates each article, normalizes fields and timestamps, and collects rejection stats.
+3. `load`: upserts articles and links them to user requests with deduplication.
+4. `worker`: atomically claims queued search requests from PostgreSQL and processes them safely.
 
-Transform: Python скрипт читает данные из нового файла data/raw, проверяет чтобы были указаны: автор, заголовок, описание не меньше 20 символов, url ссылка
-
-Load: psycopg2 подключается к PostgreSQL, перед вставкой разрешается конфликт с уникальной url ссылкой. Если такая ссылка уже есть то новость не добавляется в таблицу
-
-db: создается база данных и таблица если их еще нет. url присваивается UNIQUE
-
-Pipeline: программа запускается скриптом разделенным на 5 основных модулей (db.py, extract.py, load.py, transform.py, main.py)
-
-### Схема ETL
-Everything из NewsApi (extract) -> Филтр на наличие автора, заголовка, описания не меньше 20 символов, наличие url (transform) -> загрузка статей чей url отсутствует в базе данных (load)
-
-### Структура папок
+## Repository structure
 ```text
 project/
-├── config
-|   └── config.py
-├── data /
-|   ├──raw / # тут будут храниться статьи до обработки в формате json
-|   └──clean / # тут будут храниться статьи после обработки
-├── notebooks /
-|   └── 01_eda.ipynb
-├── src /
-|   ├── __init__.py
-|   ├── db.py
-|   ├── extract.py
-|   ├── load.py
-|   └── transform.py
-├──.env.example
+├── config/
+│   └── config.py
+├── data/
+│   ├── raw/
+│   └── clean/
+├── notebooks/
+│   └── 01_eda.ipynb
+├── src/
+│   ├── __init__.py
+│   ├── db.py
+│   ├── extract.py
+│   ├── load.py
+│   ├── pipeline.py
+│   ├── transform.py
+│   └── worker.py
+├── .env.example
+├── DockerFile
+├── docker-compose.yml
 ├── main.py
-└── requirements.txt
+├── requirements.txt
+└── requirements-dev.txt
 ```
 
-### Порядок запуска
-#### склонировать репозиторий 
+## Environment variables
+Copy `.env.example` to `.env` and fill your values:
+
 ```bash
-git clone [сслыка на репозиторий]
+cp .env.example .env
 ```
 
-#### перейти в папку проекта
-```bash
-cd <repo_name>
-```
-#### создать виртуальное окружение
-```bash
-py -m venv .venv
-```
-после чего
-```bash
-.venv\Scripts\Activate.ps1
-```
+Key variables:
+- `NEWSAPI_KEY`: required for extract.
+- `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NEWS`.
+- Optional reliability settings: `REQUEST_MAX_RETRIES`, `REQUEST_TIMEOUT_SECONDS`, `MAX_PAGES_PER_REQUEST`, `DB_CONNECT_TIMEOUT_SECONDS`.
 
-#### установить библиотеки
-``` bash
+## Local run
+### 1. Install
+```bash
+python -m venv .venv
+.venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-#### скопировать .env.exsample
-``` bash
-copy .env.example .env
-```
-Заполнить .env вашими данными
-
-#### запустить код
+### 2. Initialize DB objects
 ```bash
-python main.py --keyword your_key_word --limit your_articles_limit --page_size your_page_size
+python main.py --init-only
+```
+Alternative for one-shot run: add `--bootstrap` to any run command below.
+
+### 3. Debug run (raw/clean JSON + DB table `bad_news_bears`)
+```bash
+python main.py --debug --keyword python --limit 20 --page_size 50 --language en
 ```
 
-### пример .env
-```.env
-DB_HOST=localhost
-DB_PORT=5432
-DB_USER=postgres
-DB_PASSWORD=1234
-DB_ADMIN_DB=postgres
-DB_NEWS=db_news
-NEWSAPI_KEY =your_key
+### 4. Web-mode run (requires existing `app_users` and `search_requests` rows)
+```bash
+python main.py --keyword python --limit 20 --page_size 50 --language en --user_id 1 --search_request_id 1
 ```
 
-### Важные моменты
-В папку data/raw сохраняются все статьи которые были получены за 1 запрос по вашим критериям. Им в качестве имени присваивается текущее дата-время, ключевое слово и текущая страница. 
+### 5. Worker loop
+```bash
+python main.py --worker --poll_interval 3
+```
 
-В папку data/clean попадают все статьи которые имеют: автора, заголовок, описание 20+ символов и url ссылку. им присвается имя аналогичным способом что и в data/raw однако первым словом в имени является cleaned
+## Docker
+Run app + Postgres with Docker Compose:
 
-В папке data/clean/stats содержит статистику по отклоненным статьям. Считаются все недочеты статей, а так же высчитывается первая блокирующая ошибка каждой статьи.
+```bash
+docker compose up --build
+```
+
+By default, app container runs worker mode.
+
+## Quality checks
+```bash
+python -m compileall .
+ruff check .
+pytest -q
+bandit -r src config main.py
+pip-audit
+```
+
+## Reliability and safety guarantees
+- Request retry with backoff and HTTP status handling (`429`, `5xx`).
+- Input validation in transform layer (bad records are rejected with reason stats).
+- Idempotent article upsert by URL.
+- Atomic worker dequeue (`FOR UPDATE SKIP LOCKED`) to avoid duplicate processing across workers.
+- DB connection timeout and statement timeout support.
+
+## Notes
+- `.env`, `.venv`, `__pycache__`, and generated files under `data/raw` and `data/clean` are ignored by git.
+- Keep secrets only in `.env` (never commit real keys).
+
+## Troubleshooting
+- `Database 'news_db' does not exist`:
+  - Run `python main.py --init-only` once, or add `--bootstrap` to your run command.
+- `password authentication failed`:
+  - Verify `.env` values `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`.
+  - Manually test credentials with psql/pgAdmin for the same host/port/user.
+
