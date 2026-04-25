@@ -173,7 +173,7 @@ def _fetch_payload(
 def make_extract_debug(
     key_word: str,
     page: int = 1,
-    page_size: int = 100,
+    page_size: int = 20,
     language: str = "ru",
 ) -> tuple[str, int]:
     payload, articles_count = _fetch_payload(key_word, page, page_size, language)
@@ -187,7 +187,7 @@ def make_extract_debug(
 def make_extract_web(
     key_word: str,
     page: int = 1,
-    page_size: int = 100,
+    page_size: int = 20,
     language: str = "ru",
 ) -> tuple[dict[str, Any], int]:
     payload, articles_count = _fetch_payload(key_word, page, page_size, language)
