@@ -13,6 +13,7 @@ from src import (
     create_request_stats_table,
     create_search_requests_table,
     create_user_news_table,
+    create_users_keys_table,
     ensure_tables_exist,
     init_database,
     run_debug_pipeline,
@@ -99,6 +100,7 @@ def init_all_tables(debug: bool) -> None:
     create_articles_table()
     create_user_news_table()
     create_request_stats_table()
+    create_users_keys_table()
     if debug:
         create_news_tables()
 
@@ -123,9 +125,9 @@ def _validate_web_context(user_id: int, search_request_id: int) -> None:
 
 
 def _ensure_runtime_schema(debug_mode: bool) -> None:
-    if not database_exists(settings.db_news):
+    if not database_exists(settings.news_db):
         raise RuntimeError(
-            f"Database '{settings.db_news}' does not exist. "
+            f"Database '{settings.news_db}' does not exist. "
             "Run `python main.py --init-only` once or re-run with `--bootstrap`."
         )
 
@@ -134,11 +136,12 @@ def _ensure_runtime_schema(debug_mode: bool) -> None:
         "search_requests",
         "articles",
         "user_news",
+        "users_keys",
         "request_stats",
     ]
-    ensure_tables_exist(settings.db_news, required_tables)
+    ensure_tables_exist(settings.news_db, required_tables)
 
-    if debug_mode and not table_exists(settings.db_news, "bad_news_bears"):
+    if debug_mode and not table_exists(settings.news_db, "bad_news_bears"):
         create_news_tables()
 
 

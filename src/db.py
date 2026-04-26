@@ -161,7 +161,7 @@ def create_database_if_not_exists(db_name: str) -> None:
 
 
 def init_database() -> None:
-    create_database_if_not_exists(settings.db_news)
+    create_database_if_not_exists(settings.news_db)
 
 
 def create_search_requests_table() -> None:
@@ -192,7 +192,7 @@ def create_search_requests_table() -> None:
         """,
     ]
 
-    with get_cursor(settings.db_news) as (conn, cur):
+    with get_cursor(settings.news_db) as (conn, cur):
         cur.execute(query)
         for index_query in index_list:
             cur.execute(index_query)
@@ -218,7 +218,7 @@ def create_articles_table() -> None:
             ON articles(published_at DESC)
     """
 
-    with get_cursor(settings.db_news) as (conn, cur):
+    with get_cursor(settings.news_db) as (conn, cur):
         cur.execute(query)
         cur.execute(index)
         conn.commit()
@@ -252,7 +252,7 @@ def create_user_news_table() -> None:
         """,
     ]
 
-    with get_cursor(settings.db_news) as (conn, cur):
+    with get_cursor(settings.news_db) as (conn, cur):
         cur.execute(query)
         for index_query in index_list:
             cur.execute(index_query)
@@ -298,7 +298,7 @@ def create_request_stats_table() -> None:
         END $$;
     """
 
-    with get_cursor(settings.db_news) as (conn, cur):
+    with get_cursor(settings.news_db) as (conn, cur):
         cur.execute(query)
         cur.execute(trigger_function)
         cur.execute(trigger)
@@ -318,7 +318,7 @@ def create_app_users_table() -> None:
         )
     """
 
-    with get_cursor(settings.db_news) as (conn, cur):
+    with get_cursor(settings.news_db) as (conn, cur):
         cur.execute(query)
         conn.commit()
 
@@ -338,8 +338,51 @@ def create_news_tables() -> None:
         )
     """
 
-    with get_cursor(settings.db_news) as (conn, cur):
+    with get_cursor(settings.news_db) as (conn, cur):
         cur.execute(query)
+        conn.commit()
+
+def create_users_keys_table() -> None:
+    query = """
+            CREATE TABLE IF NOT EXISTS users_keys(
+            id BIGSERIAL PRIMARY KEY,
+            user_id BIGINT NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+            service VARCHAR(50) NOT NULL,
+            encrypted_key TEXT NOT NULL,
+            iv TEXT NOT NULL,
+            auth_tag TEXT NOT NULL,
+            key_last4 VARCHAR(4) NOT NULL,
+            uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            UNIQUE (user_id, service)
+            );
+            """
+    trigger_function = """
+                    CREATE OR REPLACE FUNCTION set_users_keys_updated_at()
+                    RETURNS TRIGGER AS $$
+                    BEGIN
+                        NEW.updated_at = NOW();
+                        RETURN NEW;
+                    END;
+                    $$ LANGUAGE plpgsql;
+                        """
+    trigger = """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                SELECT 1 FROM pg_trigger WHERE tgname = 'trg_users_keys_updated_at'
+                ) THEN
+                CREATE TRIGGER trg_users_keys_updated_at
+                BEFORE UPDATE ON users_keys
+                FOR EACH ROW
+                EXECUTE FUNCTION set_users_keys_updated_at();
+            END IF;
+        END $$;
+            """
+    with get_cursor(settings.news_db) as (conn, cur):
+        cur.execute(query)
+        cur.execute(trigger_function)
+        cur.execute(trigger)
         conn.commit()
 
 
@@ -363,7 +406,7 @@ def claim_next_search_request() -> dict | None:
         RETURNING sr.id, sr.user_id, sr.keyword, sr.language, sr.limit_count, sr.page_size
     """
 
-    with get_cursor(settings.db_news) as (conn, cur):
+    with get_cursor(settings.news_db) as (conn, cur):
         cur.execute(query)
         row = cur.fetchone()
         conn.commit()
@@ -372,20 +415,20 @@ def claim_next_search_request() -> dict | None:
 
 def search_request_exists(search_request_id: int) -> bool:
     query = "SELECT 1 FROM search_requests WHERE id = %s"
-    with get_cursor(settings.db_news, autocommit=True) as (_, cur):
+    with get_cursor(settings.news_db, autocommit=True) as (_, cur):
         cur.execute(query, (search_request_id,))
         return cur.fetchone() is not None
 
 
 def app_user_exists(user_id: int) -> bool:
     query = "SELECT 1 FROM app_users WHERE id = %s"
-    with get_cursor(settings.db_news, autocommit=True) as (_, cur):
+    with get_cursor(settings.news_db, autocommit=True) as (_, cur):
         cur.execute(query, (user_id,))
         return cur.fetchone() is not None
 
 
 def search_request_belongs_to_user(search_request_id: int, user_id: int) -> bool:
     query = "SELECT 1 FROM search_requests WHERE id = %s AND user_id = %s"
-    with get_cursor(settings.db_news, autocommit=True) as (_, cur):
+    with get_cursor(settings.news_db, autocommit=True) as (_, cur):
         cur.execute(query, (search_request_id, user_id))
         return cur.fetchone() is not None

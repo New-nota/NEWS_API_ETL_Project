@@ -84,6 +84,7 @@ def _fetch_payload(
     page: int,
     page_size: int,
     language: str,
+    news_api_key: str | None = None,
 ) -> tuple[dict[str, Any], int]:
     if page <= 0:
         raise ValueError("page must be > 0")
@@ -93,7 +94,7 @@ def _fetch_payload(
     normalized_page_size = min(page_size, settings.request_page_size_max)
 
     params = {
-        "apiKey": _require_newsapi_key(),
+        "apiKey": news_api_key or _require_newsapi_key(),
         "language": language,
         "q": key_word,
         "pageSize": normalized_page_size,
@@ -189,8 +190,9 @@ def make_extract_web(
     page: int = 1,
     page_size: int = 20,
     language: str = "ru",
+    news_api_key: str | None = None,
 ) -> tuple[dict[str, Any], int]:
-    payload, articles_count = _fetch_payload(key_word, page, page_size, language)
+    payload, articles_count = _fetch_payload(key_word, page, page_size, language, news_api_key)
     if articles_count == 0:
         logger.info("There are no more articles for keyword=%s", key_word)
     return payload, articles_count
