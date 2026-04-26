@@ -42,7 +42,7 @@ def load_news(clean_news: str, max_rows: int | None = None) -> int:
     rows = data if max_rows is None else data[:max_rows]
 
     loaded_count = 0
-    with get_cursor(settings.db_news) as (conn, cur):
+    with get_cursor(settings.news_db) as (conn, cur):
         for news in rows:
             cur.execute(
                 query,
@@ -150,7 +150,7 @@ def load_request_stats(search_request_id: int, stats: dict[str, Any]) -> None:
             prime_reasons = EXCLUDED.prime_reasons
     """
 
-    with get_cursor(settings.db_news) as (conn, cur):
+    with get_cursor(settings.news_db) as (conn, cur):
         cur.execute(
             query,
             (
@@ -182,7 +182,7 @@ def load_web_pipeline(
         rows = clean_data
 
     loaded_count = 0
-    with get_cursor(settings.db_news) as (conn, cur):
+    with get_cursor(settings.news_db) as (conn, cur):
         for article in rows:
             keyword = article["key_word"]
             fetched_at = article["fetched_at"]

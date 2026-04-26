@@ -44,6 +44,7 @@ def run_pipeline_for_web_user(
     limit: int,
     page_size: int,
     language: str | None = None,
+    news_api_key: str | None = None,
 ) -> int:
     if limit <= 0:
         raise ValueError("limit must be > 0")
@@ -60,7 +61,7 @@ def run_pipeline_for_web_user(
 
     try:
         while loaded_total < limit and page <= max_pages:
-            payload, raw_articles_count = make_extract_web(key_word, page, effective_page_size, language_to_use)
+            payload, raw_articles_count = make_extract_web(key_word, page, effective_page_size, language_to_use, news_api_key=news_api_key)
 
             if page == 1:
                 max_pages = _resolve_max_pages(payload, effective_page_size)

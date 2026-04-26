@@ -95,12 +95,13 @@ class Settings:
     db_user: str
     db_password: str
     db_admin_db: str
-    db_news: str
+    news_db: str
 
     newsapi_key: str
     news_url: str
     default_language: str
     sort_by: str
+    news_api_key_encryption_secret: str
 
     request_timeout_seconds: float
     request_max_retries: int
@@ -145,11 +146,12 @@ def build_settings() -> Settings:
         db_user=_get_env_str("DB_USER", "postgres"),
         db_password=_get_env_str("DB_PASSWORD", "postgres"),
         db_admin_db=_get_env_str("DB_ADMIN_DB", "postgres"),
-        db_news=_get_env_str("DB_NEWS", "news_db"),
+        news_db=_get_env_str("NEWS_DB", "news_db"),
         newsapi_key=_get_env_str("NEWSAPI_KEY", ""),
         news_url=_get_env_str("NEWSAPI_URL", "https://newsapi.org/v2/everything"),
         default_language=_get_env_str("NEWSAPI_DEFAULT_LANGUAGE", "ru"),
         sort_by=sort_by,
+        news_api_key_encryption_secret = _get_env_str("NEWS_API_KEY_ENCRYPTION_SECRET", "NO"),
         request_timeout_seconds=_get_env_float("REQUEST_TIMEOUT_SECONDS", 15.0, min_value=1.0),
         request_max_retries=_get_env_int("REQUEST_MAX_RETRIES", 3, min_value=0),
         request_backoff_factor=_get_env_float("REQUEST_BACKOFF_FACTOR", 1.0, min_value=0.0),
