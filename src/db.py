@@ -305,6 +305,41 @@ def create_request_stats_table() -> None:
         conn.commit()
 
 
+def create_request_ai_report_table() -> None:
+    query = """
+        CREATE TABLE IF NOT EXISTS request_ai_report (
+            id BIGSERIAL PRIMARY KEY,
+            search_request_id BIGINT NOT NULL UNIQUE REFERENCES search_requests(id) ON DELETE CASCADE,
+
+            model_provider TEXT NOT NULL,
+            model_name TEXT NOT NULL,
+
+            news_count INTEGER NOT NULL DEFAULT 0,
+            
+            summary TEXT NOT NULL,
+            main_conclusions JSONB NOT NULL DEFAULT '[]'::jsonb,
+            sentiment_label TEXT NOT NULL,
+            sentiment_score NUMERIC(5, 2),
+            sentiment_distribution JSONB NOT NULL DEFAULT '{}'::jsonb,
+            main_topics JSONB NOT NULL DEFAULT '[]'::jsonb,
+            highlight JSONB NOT NULL DEFAULT '{}'::jsonb,
+            data_quality_warnings JSONB NOT NULL DEFAULT '[]'::jsonb,
+
+            promt_version TEXT NOT NULL DEFAULT 'v1',
+
+            input_tokens INTEGER,
+            output_tokens INTEGER,
+            total_tokens INTEGER,
+            
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    """
+
+    with get_cursor(settings.news_db) as (conn, cur):
+        cur.execute(query)
+        conn.commit()
+
+
 def create_app_users_table() -> None:
     query = """
         CREATE TABLE IF NOT EXISTS app_users (
@@ -432,3 +467,22 @@ def search_request_belongs_to_user(search_request_id: int, user_id: int) -> bool
     with get_cursor(settings.news_db, autocommit=True) as (_, cur):
         cur.execute(query, (search_request_id, user_id))
         return cur.fetchone() is not None
+
+
+def fetch_articles_for_search_request(search_request_id: int) -> list[dict]:
+    query = """
+        SELECT
+            a.url,
+            a.source_name,
+            a.author,
+            a.title,
+            a.description,
+            a.published_at
+        FROM articles a
+        JOIN user_news un ON un.article_id = a.id
+        WHERE un.search_request_id = %s
+        ORDER BY a.published_at DESC NULLS LAST, a.id
+    """
+    with get_cursor(settings.news_db, autocommit=True) as (_, cur):
+        cur.execute(query, (search_request_id,))
+        return [dict(row) for row in cur.fetchall()]

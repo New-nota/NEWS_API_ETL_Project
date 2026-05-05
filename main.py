@@ -10,6 +10,7 @@ from src import (
     create_articles_table,
     database_exists,
     create_news_tables,
+    create_request_ai_report_table,
     create_request_stats_table,
     create_search_requests_table,
     create_user_news_table,
@@ -101,6 +102,7 @@ def init_all_tables(debug: bool) -> None:
     create_user_news_table()
     create_request_stats_table()
     create_users_keys_table()
+    create_request_ai_report_table()
     if debug:
         create_news_tables()
 
@@ -138,6 +140,7 @@ def _ensure_runtime_schema(debug_mode: bool) -> None:
         "user_news",
         "users_keys",
         "request_stats",
+        "request_ai_report",
     ]
     ensure_tables_exist(settings.news_db, required_tables)
 

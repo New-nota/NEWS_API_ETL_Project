@@ -8,6 +8,7 @@ from psycopg2.extras import Json
 
 from config.config import settings
 
+from .ai.schemas import SummaryResponse
 from .db import get_cursor
 
 BASE_DIR = (Path(__file__).resolve().parent.parent) / "data" / "clean"
@@ -160,6 +161,71 @@ def load_request_stats(search_request_id: int, stats: dict[str, Any]) -> None:
                 int(stats.get("rejected_articles", 0)),
                 Json(stats.get("reasons_counts", {})),
                 Json(_extract_prime_reasons(stats)),
+            ),
+        )
+        conn.commit()
+
+
+def load_ai_report(search_request_id: int, summary: SummaryResponse) -> None:
+    query = """
+        INSERT INTO request_ai_report (
+            search_request_id,
+            model_provider,
+            model_name,
+            news_count,
+            summary,
+            main_conclusions,
+            sentiment_label,
+            sentiment_score,
+            sentiment_distribution,
+            main_topics,
+            highlight,
+            data_quality_warnings,
+            promt_version,
+            input_tokens,
+            output_tokens,
+            total_tokens
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (search_request_id) DO UPDATE
+        SET
+            model_provider = EXCLUDED.model_provider,
+            model_name = EXCLUDED.model_name,
+            news_count = EXCLUDED.news_count,
+            summary = EXCLUDED.summary,
+            main_conclusions = EXCLUDED.main_conclusions,
+            sentiment_label = EXCLUDED.sentiment_label,
+            sentiment_score = EXCLUDED.sentiment_score,
+            sentiment_distribution = EXCLUDED.sentiment_distribution,
+            main_topics = EXCLUDED.main_topics,
+            highlight = EXCLUDED.highlight,
+            data_quality_warnings = EXCLUDED.data_quality_warnings,
+            promt_version = EXCLUDED.promt_version,
+            input_tokens = EXCLUDED.input_tokens,
+            output_tokens = EXCLUDED.output_tokens,
+            total_tokens = EXCLUDED.total_tokens
+    """
+
+    with get_cursor(settings.news_db) as (conn, cur):
+        cur.execute(
+            query,
+            (
+                search_request_id,
+                summary.model_provider,
+                summary.model_name,
+                summary.articles_count,
+                summary.summary,
+                Json(summary.main_conclusions),
+                summary.sentiment_label,
+                summary.sentiment_score,
+                Json(summary.sentiment_distribution.model_dump()),
+                Json(summary.main_topics),
+                Json(summary.highlight.model_dump()),
+                Json(summary.data_quality_warnings),
+                summary.prompt_version,
+                summary.usage.input_tokens,
+                summary.usage.output_tokens,
+                summary.usage.total_tokens,
             ),
         )
         conn.commit()

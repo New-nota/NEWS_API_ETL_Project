@@ -6,11 +6,69 @@ from typing import Any
 
 from config.config import settings
 
+from .ai import MistralClientError, generate_news_summary
+from .db import fetch_articles_for_search_request
 from .extract import make_extract_debug, make_extract_web
-from .load import load_news, load_request_stats, load_web_pipeline
+from .load import load_ai_report, load_news, load_request_stats, load_web_pipeline
 from .transform import make_empty_stats, transform_article_debug, transform_article_web
 
 logger = logging.getLogger(__name__)
+
+
+def _generate_and_store_ai_summary(
+    search_request_id: int,
+    keyword: str,
+    statistics: dict[str, Any],
+) -> None:
+    if not settings.ai_summary_enabled:
+        logger.info("AI summary disabled by config; skipping")
+        return
+
+    try:
+        articles = fetch_articles_for_search_request(search_request_id)
+    except Exception as exc:
+        logger.warning(
+            "Skipping AI summary: failed to fetch articles for search_request_id=%s: %s",
+            search_request_id,
+            exc,
+        )
+        return
+
+    if not articles:
+        logger.info(
+            "Skipping AI summary: no articles linked to search_request_id=%s",
+            search_request_id,
+        )
+        return
+
+    try:
+        summary = generate_news_summary(articles, keyword, statistics, use_ai=True)
+    except (MistralClientError, ValueError) as exc:
+        logger.warning("AI summary generation failed for search_request_id=%s: %s", search_request_id, exc)
+        return
+    except Exception as exc:
+        logger.exception(
+            "Unexpected error during AI summary for search_request_id=%s: %s",
+            search_request_id,
+            exc,
+        )
+        return
+
+    try:
+        load_ai_report(search_request_id, summary)
+        logger.info(
+            "AI summary stored for search_request_id=%s articles=%s sentiment=%s/%s",
+            search_request_id,
+            summary.articles_count,
+            summary.sentiment_label,
+            summary.sentiment_score,
+        )
+    except Exception as exc:
+        logger.exception(
+            "Failed to store AI summary for search_request_id=%s: %s",
+            search_request_id,
+            exc,
+        )
 
 
 def merge_stats(stats: dict[str, Any], page_stats: dict[str, Any]) -> None:
@@ -104,6 +162,8 @@ def run_pipeline_for_web_user(
             )
     finally:
         load_request_stats(search_request_id, statistics)
+
+    _generate_and_store_ai_summary(search_request_id, key_word, statistics)
 
     logger.info("Loaded %s news for keyword=%s", loaded_total, key_word)
     return loaded_total

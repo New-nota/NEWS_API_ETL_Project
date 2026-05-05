@@ -42,7 +42,7 @@ def _page_stats() -> dict:
 def test_pipeline_respects_limit(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = {"pages": 0, "max_rows": []}
 
-    def fake_extract(keyword: str, page: int, page_size: int, language: str):
+    def fake_extract(keyword: str, page: int, page_size: int, language: str, news_api_key: str | None = None):
         calls["pages"] += 1
         return (
             {
@@ -102,7 +102,7 @@ def test_pipeline_respects_limit(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_pipeline_writes_stats_even_on_error(monkeypatch: pytest.MonkeyPatch) -> None:
     stats_calls = {"count": 0}
 
-    def fake_extract(keyword: str, page: int, page_size: int, language: str):
+    def fake_extract(keyword: str, page: int, page_size: int, language: str, news_api_key: str | None = None):
         raise RuntimeError("boom")
 
     def fake_stats(search_request_id: int, stats: dict):

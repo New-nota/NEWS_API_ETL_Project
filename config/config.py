@@ -63,6 +63,18 @@ def _get_env_int(
     return value
 
 
+def _get_env_bool(name: str, default: bool) -> bool:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    normalized = raw_value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off", ""}:
+        return False
+    raise ValueError(f"Environment variable {name} must be a boolean")
+
+
 def _get_env_float(
     name: str,
     default: float | None = None,
@@ -102,6 +114,12 @@ class Settings:
     default_language: str
     sort_by: str
     news_api_key_encryption_secret: str
+
+    mistral_api_key: str
+    mistral_api_url: str
+    mistral_model: str
+    ai_summary_enabled: bool
+    ai_prompt_version: str
 
     request_timeout_seconds: float
     request_max_retries: int
@@ -152,6 +170,13 @@ def build_settings() -> Settings:
         default_language=_get_env_str("NEWSAPI_DEFAULT_LANGUAGE", "ru"),
         sort_by=sort_by,
         news_api_key_encryption_secret = _get_env_str("NEWS_API_KEY_ENCRYPTION_SECRET", "NO"),
+        mistral_api_key=_get_env_str("MISTRAL_API_KEY", ""),
+        mistral_api_url=_get_env_str(
+            "MISTRAL_API_URL", "https://api.mistral.ai/v1/chat/completions"
+        ),
+        mistral_model=_get_env_str("MISTRAL_MODEL", "mistral-large-latest"),
+        ai_summary_enabled=_get_env_bool("AI_SUMMARY_ENABLED", True),
+        ai_prompt_version=_get_env_str("AI_PROMPT_VERSION", "v1"),
         request_timeout_seconds=_get_env_float("REQUEST_TIMEOUT_SECONDS", 15.0, min_value=1.0),
         request_max_retries=_get_env_int("REQUEST_MAX_RETRIES", 3, min_value=0),
         request_backoff_factor=_get_env_float("REQUEST_BACKOFF_FACTOR", 1.0, min_value=0.0),
