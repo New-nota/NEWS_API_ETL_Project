@@ -120,6 +120,9 @@ class Settings:
     mistral_model: str
     ai_summary_enabled: bool
     ai_prompt_version: str
+    ai_provider: str
+    ai_request_timeout_seconds: float
+    ai_report_max_articles: int
 
     request_timeout_seconds: float
     request_max_retries: int
@@ -177,6 +180,9 @@ def build_settings() -> Settings:
         mistral_model=_get_env_str("MISTRAL_MODEL", "mistral-large-latest"),
         ai_summary_enabled=_get_env_bool("AI_SUMMARY_ENABLED", True),
         ai_prompt_version=_get_env_str("AI_PROMPT_VERSION", "v1"),
+        ai_provider=_get_env_str("AI_PROVIDER", "mistral"),
+        ai_request_timeout_seconds=_get_env_float("AI_REQUEST_TIMEOUT_SECONDS", 60.0, min_value=1.0),
+        ai_report_max_articles=_get_env_int("AI_REPORT_MAX_ARTICLES", 50, min_value=1),
         request_timeout_seconds=_get_env_float("REQUEST_TIMEOUT_SECONDS", 15.0, min_value=1.0),
         request_max_retries=_get_env_int("REQUEST_MAX_RETRIES", 3, min_value=0),
         request_backoff_factor=_get_env_float("REQUEST_BACKOFF_FACTOR", 1.0, min_value=0.0),

@@ -74,6 +74,9 @@ cp .env.example .env
 - `MISTRAL_MODEL` (default `mistral-large-latest`)
 - `AI_SUMMARY_ENABLED` (default `true`) — set to `false` to skip the AI step entirely
 - `AI_PROMPT_VERSION` (default `v1`) — stored alongside each report for prompt-version tracking
+- `AI_PROVIDER` (default `mistral`) — provider label written to `request_ai_report.model_provider`
+- `AI_REQUEST_TIMEOUT_SECONDS` (default `60`) — HTTP timeout for the AI provider call
+- `AI_REPORT_MAX_ARTICLES` (default `50`) — hard cap on articles passed to the model per report
 
 **Reliability and limits**
 - `REQUEST_TIMEOUT_SECONDS`, `REQUEST_MAX_RETRIES`, `REQUEST_BACKOFF_FACTOR`, `REQUEST_MAX_BACKOFF_SECONDS`
@@ -144,16 +147,18 @@ pip-audit
 After `run_pipeline_for_web_user` finishes loading and persists `request_stats`, it calls `_generate_and_store_ai_summary`, which:
 
 1. Reads the loaded pocket from DB: `articles JOIN user_news WHERE search_request_id = ?` — the canonical, deduplicated set the user actually got.
-2. Calls Mistral (`response_format: json_object`) with the system prompt in `src/ai/prompts.py`.
-3. Validates and normalizes the JSON response (sentiment percentages re-normalized to sum to 100; `sentiment_label` forced to match the dominant key in the distribution; `highlight.url` falls back to a real article URL if the model invented one).
-4. Upserts a row in `request_ai_report` keyed by `search_request_id`.
+2. Truncates the article list to `AI_REPORT_MAX_ARTICLES` (default 50) before calling the model.
+3. Calls Mistral (`response_format: json_object`) with the system prompt in `src/ai/prompts.py`.
+4. Validates and normalizes the JSON response (sentiment percentages re-normalized to sum to 100; `sentiment_label` forced to match the dominant key in the distribution; `highlight.url` replaced with a real article URL if the model invented one).
+5. Upserts a row in `request_ai_report` keyed by `search_request_id` with `status='success'`.
 
 The website reads the result by querying `request_ai_report` once `search_requests.status = 'success'`.
 
-The AI step is **best-effort**: any Mistral or DB error is logged but does not fail the search request — articles are still loaded and the request is still marked `success`. To skip AI entirely, set `AI_SUMMARY_ENABLED=false`.
+The AI step is **best-effort**: any Mistral or DB error is logged but does not fail the search request — articles are still loaded and the request is still marked `success`. On AI failure (Mistral error, validation error, or empty article pocket) the pipeline upserts a `request_ai_report` row with `status='failed'` and the error message in `error_text`, so the frontend can distinguish "AI failed" from "AI not yet generated." To skip AI entirely, set `AI_SUMMARY_ENABLED=false`.
 
 Stored summary fields:
-- `news_count` — articles linked to this request
+- `status` (`success` | `failed`) and `error_text` (populated only when `status='failed'`)
+- `news_count` — articles linked to this request (capped at `AI_REPORT_MAX_ARTICLES`)
 - `summary` — 1-2 sentence neutral overview
 - `main_conclusions` (JSONB) — exactly 3 short conclusions
 - `sentiment_label` (`positive` | `negative` | `neutral`) and `sentiment_score` — dominant sentiment and its percentage

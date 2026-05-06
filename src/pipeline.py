@@ -9,10 +9,37 @@ from config.config import settings
 from .ai import MistralClientError, generate_news_summary
 from .db import fetch_articles_for_search_request
 from .extract import make_extract_debug, make_extract_web
-from .load import load_ai_report, load_news, load_request_stats, load_web_pipeline
+from .load import (
+    load_ai_report,
+    load_failed_ai_report,
+    load_news,
+    load_request_stats,
+    load_web_pipeline,
+)
 from .transform import make_empty_stats, transform_article_debug, transform_article_web
 
 logger = logging.getLogger(__name__)
+
+
+def _persist_failed_ai_report(
+    search_request_id: int,
+    error_text: str,
+    news_count: int,
+) -> None:
+    try:
+        load_failed_ai_report(
+            search_request_id,
+            error_text,
+            news_count=news_count,
+            model_provider=settings.ai_provider,
+            prompt_version=settings.ai_prompt_version,
+        )
+    except Exception as store_exc:
+        logger.exception(
+            "Failed to persist failed AI report for search_request_id=%s: %s",
+            search_request_id,
+            store_exc,
+        )
 
 
 def _generate_and_store_ai_summary(
@@ -39,12 +66,34 @@ def _generate_and_store_ai_summary(
             "Skipping AI summary: no articles linked to search_request_id=%s",
             search_request_id,
         )
+        _persist_failed_ai_report(
+            search_request_id,
+            "No articles linked to search request",
+            news_count=0,
+        )
         return
+
+    max_articles = settings.ai_report_max_articles
+    if len(articles) > max_articles:
+        logger.info(
+            "Truncating articles for AI from %s to %s (search_request_id=%s)",
+            len(articles),
+            max_articles,
+            search_request_id,
+        )
+        articles = articles[:max_articles]
+
+    news_count = len(articles)
 
     try:
         summary = generate_news_summary(articles, keyword, statistics, use_ai=True)
     except (MistralClientError, ValueError) as exc:
-        logger.warning("AI summary generation failed for search_request_id=%s: %s", search_request_id, exc)
+        logger.warning(
+            "AI summary generation failed for search_request_id=%s: %s",
+            search_request_id,
+            exc,
+        )
+        _persist_failed_ai_report(search_request_id, str(exc), news_count=news_count)
         return
     except Exception as exc:
         logger.exception(
@@ -52,6 +101,7 @@ def _generate_and_store_ai_summary(
             search_request_id,
             exc,
         )
+        _persist_failed_ai_report(search_request_id, str(exc), news_count=news_count)
         return
 
     try:
@@ -69,6 +119,7 @@ def _generate_and_store_ai_summary(
             search_request_id,
             exc,
         )
+        _persist_failed_ai_report(search_request_id, str(exc), news_count=news_count)
 
 
 def merge_stats(stats: dict[str, Any], page_stats: dict[str, Any]) -> None:

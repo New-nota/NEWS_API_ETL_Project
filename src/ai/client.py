@@ -84,7 +84,7 @@ class MistralClient:
                 self.api_url,
                 headers=headers,
                 json=payload,
-                timeout=settings.request_timeout_seconds * 4,
+                timeout=settings.ai_request_timeout_seconds,
             )
         except requests.exceptions.Timeout as exc:
             raise MistralClientError("Mistral API request timed out") from exc

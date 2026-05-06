@@ -22,7 +22,7 @@ from .db import (
     table_exists,
 )
 from .extract import make_extract_debug, make_extract_web
-from .load import load_ai_report, load_news, load_request_stats, load_web_pipeline
+from .load import load_ai_report, load_failed_ai_report, load_news, load_request_stats, load_web_pipeline
 from .pipeline import run_debug_pipeline, run_pipeline_for_web_user
 from .transform import transform_article_debug, transform_article_web
 from .worker import run_worker_loop
@@ -47,6 +47,7 @@ __all__ = [
     "get_cursor",
     "init_database",
     "load_ai_report",
+    "load_failed_ai_report",
     "load_news",
     "load_request_stats",
     "load_web_pipeline",

@@ -21,18 +21,30 @@ logger = logging.getLogger(__name__)
 _VALID_SENTIMENT_LABELS = {"positive", "negative", "neutral"}
 
 
+def _format_published_at(value: Any) -> str:
+    if value is None:
+        return "Unknown"
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return str(value)
+
+
 def _build_articles_text(articles: list[dict[str, Any]], max_length: int = 15000) -> str:
     parts = []
     for idx, article in enumerate(articles, 1):
         title = article.get("title") or "No title"
         author = article.get("author") or "Unknown"
+        source = article.get("source_name") or "Unknown"
+        published_at = _format_published_at(article.get("published_at"))
         description = article.get("description") or "No description"
         url = article.get("url") or "No URL"
         snippet = description[:500] + ("..." if len(description) > 500 else "")
         parts.append(
             f"  Article {idx}:\n"
             f"    Title: {title}\n"
+            f"    Source: {source}\n"
             f"    Author: {author}\n"
+            f"    Published: {published_at}\n"
             f"    URL: {url}\n"
             f"    Description: {snippet}\n"
         )
@@ -81,27 +93,29 @@ def _detect_data_quality_warnings(
 def _normalize_sentiment(
     raw: dict[str, Any],
 ) -> tuple[SentimentDistribution, str, float]:
-    distribution = SentimentDistribution(
-        positive=float(raw.get("positive", 0) or 0),
-        negative=float(raw.get("negative", 0) or 0),
-        neutral=float(raw.get("neutral", 0) or 0),
-    )
-    total = distribution.positive + distribution.negative + distribution.neutral
-    if total <= 0:
-        distribution = SentimentDistribution(positive=0, negative=0, neutral=100)
-        total = 100.0
-    if not (99 <= total <= 101):
-        distribution = SentimentDistribution(
-            positive=round(distribution.positive / total * 100, 2),
-            negative=round(distribution.negative / total * 100, 2),
-            neutral=round(distribution.neutral / total * 100, 2),
-        )
+    # Operate on plain floats first — the schema enforces le=100, but the
+    # whole point of this function is to rescue out-of-range model output
+    # by renormalizing.
+    pos = max(float(raw.get("positive", 0) or 0), 0.0)
+    neg = max(float(raw.get("negative", 0) or 0), 0.0)
+    neu = max(float(raw.get("neutral", 0) or 0), 0.0)
 
-    pairs = {
-        "positive": distribution.positive,
-        "negative": distribution.negative,
-        "neutral": distribution.neutral,
-    }
+    total = pos + neg + neu
+    if total <= 0:
+        pos, neg, neu = 0.0, 0.0, 100.0
+        total = 100.0
+
+    if not (99 <= total <= 101):
+        pos = pos / total * 100
+        neg = neg / total * 100
+        neu = neu / total * 100
+
+    pos = min(round(pos, 2), 100.0)
+    neg = min(round(neg, 2), 100.0)
+    neu = min(round(neu, 2), 100.0)
+
+    distribution = SentimentDistribution(positive=pos, negative=neg, neutral=neu)
+    pairs = {"positive": pos, "negative": neg, "neutral": neu}
     label = max(pairs, key=lambda key: pairs[key])
     score = round(pairs[label], 2)
     return distribution, label, score
@@ -134,8 +148,17 @@ def _build_highlight(raw: Any, articles: list[dict[str, Any]]) -> HighlightArtic
             reason="Selected by fallback (model returned no highlight)",
         )
 
-    url = str(raw.get("url") or fallback["url"])
-    matched = next((a for a in articles if a.get("url") == url), fallback)
+    raw_url = str(raw.get("url") or "").strip()
+    matched = next((a for a in articles if a.get("url") == raw_url), None)
+
+    if matched is None:
+        # Model invented a URL not present in the input. Fall back to the first
+        # real article so downstream consumers always see a valid URL.
+        url = fallback["url"]
+        matched = fallback
+    else:
+        url = raw_url
+
     return HighlightArticle(
         url=url,
         title=str(raw.get("title") or matched.get("title") or fallback["title"]),
@@ -171,6 +194,7 @@ def _fallback_summary(
             reason="First article (AI disabled)",
         ),
         data_quality_warnings=warnings,
+        model_provider=settings.ai_provider,
         prompt_version=settings.ai_prompt_version,
     )
 
@@ -207,10 +231,10 @@ def generate_news_summary(
             payload.get("sentiment_distribution") or {}
         )
 
-        raw_label = str(payload.get("sentiment_label") or "").strip().lower()
-        sentiment_label = raw_label if raw_label in _VALID_SENTIMENT_LABELS else computed_label
-        if sentiment_label != computed_label:
-            sentiment_label = computed_label
+        # The model can disagree with its own distribution (e.g. claim "positive"
+        # but emit a distribution dominated by "neutral"). Trust the distribution,
+        # not the label.
+        sentiment_label = computed_label
 
         raw_score = payload.get("sentiment_score")
         try:
@@ -238,7 +262,7 @@ def generate_news_summary(
             main_topics=main_topics,
             highlight=highlight,
             data_quality_warnings=warnings,
-            model_provider="mistral",
+            model_provider=settings.ai_provider,
             model_name=completion.model_name,
             prompt_version=settings.ai_prompt_version,
             usage=TokenUsage(

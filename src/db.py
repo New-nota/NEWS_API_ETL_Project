@@ -306,19 +306,23 @@ def create_request_stats_table() -> None:
 
 
 def create_request_ai_report_table() -> None:
-    query = """
+    create_query = """
         CREATE TABLE IF NOT EXISTS request_ai_report (
             id BIGSERIAL PRIMARY KEY,
             search_request_id BIGINT NOT NULL UNIQUE REFERENCES search_requests(id) ON DELETE CASCADE,
 
-            model_provider TEXT NOT NULL,
-            model_name TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'success'
+                CHECK (status IN ('success', 'failed')),
+            error_text TEXT,
+
+            model_provider TEXT,
+            model_name TEXT,
 
             news_count INTEGER NOT NULL DEFAULT 0,
-            
-            summary TEXT NOT NULL,
+
+            summary TEXT,
             main_conclusions JSONB NOT NULL DEFAULT '[]'::jsonb,
-            sentiment_label TEXT NOT NULL,
+            sentiment_label TEXT,
             sentiment_score NUMERIC(5, 2),
             sentiment_distribution JSONB NOT NULL DEFAULT '{}'::jsonb,
             main_topics JSONB NOT NULL DEFAULT '[]'::jsonb,
@@ -330,13 +334,42 @@ def create_request_ai_report_table() -> None:
             input_tokens INTEGER,
             output_tokens INTEGER,
             total_tokens INTEGER,
-            
+
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
     """
 
+    # Idempotently bring older deployments to the current shape: add
+    # status/error_text and relax NOT NULL on AI fields so failed rows can
+    # be stored alongside successful ones.
+    migrations = [
+        "ALTER TABLE request_ai_report ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'success'",
+        "ALTER TABLE request_ai_report ADD COLUMN IF NOT EXISTS error_text TEXT",
+        "ALTER TABLE request_ai_report ALTER COLUMN summary DROP NOT NULL",
+        "ALTER TABLE request_ai_report ALTER COLUMN sentiment_label DROP NOT NULL",
+        "ALTER TABLE request_ai_report ALTER COLUMN model_provider DROP NOT NULL",
+        "ALTER TABLE request_ai_report ALTER COLUMN model_name DROP NOT NULL",
+    ]
+
+    add_status_check = """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM pg_constraint
+                WHERE conname = 'request_ai_report_status_check'
+            ) THEN
+                ALTER TABLE request_ai_report
+                ADD CONSTRAINT request_ai_report_status_check
+                CHECK (status IN ('success', 'failed'));
+            END IF;
+        END $$;
+    """
+
     with get_cursor(settings.news_db) as (conn, cur):
-        cur.execute(query)
+        cur.execute(create_query)
+        for migration in migrations:
+            cur.execute(migration)
+        cur.execute(add_status_check)
         conn.commit()
 
 

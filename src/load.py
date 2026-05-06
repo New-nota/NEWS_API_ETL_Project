@@ -170,6 +170,8 @@ def load_ai_report(search_request_id: int, summary: SummaryResponse) -> None:
     query = """
         INSERT INTO request_ai_report (
             search_request_id,
+            status,
+            error_text,
             model_provider,
             model_name,
             news_count,
@@ -186,9 +188,11 @@ def load_ai_report(search_request_id: int, summary: SummaryResponse) -> None:
             output_tokens,
             total_tokens
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, 'success', NULL, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (search_request_id) DO UPDATE
         SET
+            status = 'success',
+            error_text = NULL,
             model_provider = EXCLUDED.model_provider,
             model_name = EXCLUDED.model_name,
             news_count = EXCLUDED.news_count,
@@ -226,6 +230,49 @@ def load_ai_report(search_request_id: int, summary: SummaryResponse) -> None:
                 summary.usage.input_tokens,
                 summary.usage.output_tokens,
                 summary.usage.total_tokens,
+            ),
+        )
+        conn.commit()
+
+
+def load_failed_ai_report(
+    search_request_id: int,
+    error_text: str,
+    *,
+    news_count: int = 0,
+    model_provider: str | None = None,
+    prompt_version: str | None = None,
+) -> None:
+    query = """
+        INSERT INTO request_ai_report (
+            search_request_id,
+            status,
+            error_text,
+            model_provider,
+            news_count,
+            promt_version
+        )
+        VALUES (%s, 'failed', %s, %s, %s, COALESCE(%s, 'v1'))
+        ON CONFLICT (search_request_id) DO UPDATE
+        SET
+            status = 'failed',
+            error_text = EXCLUDED.error_text,
+            model_provider = EXCLUDED.model_provider,
+            news_count = EXCLUDED.news_count,
+            promt_version = COALESCE(EXCLUDED.promt_version, request_ai_report.promt_version)
+    """
+
+    truncated_error = (error_text or "")[:2000]
+
+    with get_cursor(settings.news_db) as (conn, cur):
+        cur.execute(
+            query,
+            (
+                search_request_id,
+                truncated_error,
+                model_provider,
+                news_count,
+                prompt_version,
             ),
         )
         conn.commit()
