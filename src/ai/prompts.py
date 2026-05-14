@@ -6,20 +6,20 @@ SYSTEM_PROMPT = """Вы — аналитик новостей. Проанали�
 
 Требуемая структура JSON (все ключи должны присутствовать, точно так, как указано ниже):
 {
-  "summary": "1-2 sentences, neutral overview of the entire article set",
-  "main_conclusions": ["conclusion 1", "conclusion 2", "conclusion 3"],
-  "sentiment_label": "positive" | "negative" | "neutral",
-  "sentiment_score": <number 0-100, percentage of articles matching sentiment_label>,
-  "sentiment_distribution": {"positive": <number>, "negative": <number>, "neutral": <number>},
-  "main_topics": ["topic 1", "topic 2", "topic 3"],
+  "summary": "1-2 предложения, нейтральный обзор всего набора статей.",
+  "main_conclusions": ["Вывод 1", "Вывод 2", "Вывод 3"],
+  "sentiment_label": "Позитивное" | "Негативное" | "Нейтральное",
+  "sentiment_score": <число от 0 до 100, процент статей, соответствующих метке sentiment_label>,
+  "sentiment_distribution": {"положительный": <число>, "отрицательный": <число>, "нейтральный": <число>},
+  "main_topics": ["тема 1", "тема 2", "тема 3"],
   "highlight": {
-    "url": "<url of the most important article>",
-    "title": "<title>",
-    "author": "<author or null>",
-    "description": "<brief description or null>",
-    "reason": "<one short sentence about why this article was selected>"
+    "url": "<url самой важной статьи>",
+    "title": "<заголовок>",
+    "author": "<автор>",
+    "description": "<краткое описание>",
+    "reason": "<Одно короткое предложение о том, почему эта статья была выбрана.>"
   },
-  "data_quality_warnings": ["warning 1", ...]
+  "data_quality_warnings": ["предупреждение 1", ...]
 }
 
 Правила:
@@ -41,12 +41,13 @@ SYSTEM_PROMPT = """Вы — аналитик новостей. Проанали�
 
 10. Будьте объективны и основывайтесь на фактах. Выводите ТОЛЬКО объект JSON."""
 
-USER_PROMPT_TEMPLATE = """Analyze this pocket of news articles.
+USER_PROMPT_TEMPLATE = """Проанализируй этот фрагмент новостных статей..
 
-Keyword: {keyword}
-Total articles: {count}
+Ключевое слово: {keyword}
+Всего статей: {count}
 
-Articles:
+Статьи:
 {articles}
 
-Return the JSON object exactly as specified in the system prompt."""
+
+Верни JSON-объект точно в том виде, в котором он указан в системном запросе."""

@@ -110,9 +110,9 @@ def _normalize_sentiment(
         neg = neg / total * 100
         neu = neu / total * 100
 
-    pos = min(round(pos, 2), 100.0)
-    neg = min(round(neg, 2), 100.0)
-    neu = min(round(neu, 2), 100.0)
+    pos = min(round(pos, 2), 99.0)
+    neg = min(round(neg, 2), 99.0)
+    neu = min(round(neu, 2), 99.0)
 
     distribution = SentimentDistribution(positive=pos, negative=neg, neutral=neu)
     pairs = {"positive": pos, "negative": neg, "neutral": neu}
