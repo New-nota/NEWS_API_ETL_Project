@@ -66,16 +66,16 @@ def _detect_data_quality_warnings(
     missing_source = sum(1 for a in articles if not a.get("source_name"))
 
     if missing_author:
-        warnings.append(f"{missing_author} articles missing author")
+        warnings.append(f"{missing_author} статья без автора")
     if missing_description:
-        warnings.append(f"{missing_description} articles missing description")
+        warnings.append(f"{missing_description} статья без описания")
     if missing_source:
-        warnings.append(f"{missing_source} articles missing source")
+        warnings.append(f"{missing_source} статья без источника")
 
     urls = [a.get("url", "") for a in articles]
     duplicate_count = len(urls) - len(set(urls))
     if duplicate_count > 0:
-        warnings.append(f"Found {duplicate_count} duplicate URLs")
+        warnings.append(f"найдено {duplicate_count} дублированных URL")
 
     if stats:
         rejected = int(stats.get("rejected_articles", 0))
@@ -84,7 +84,7 @@ def _detect_data_quality_warnings(
             top = max(reasons.items(), key=lambda kv: kv[1], default=(None, 0))
             if top[0]:
                 warnings.append(
-                    f"{rejected} articles rejected during transform; top reason: {top[0]}"
+                    f"{rejected} статей отклонено в процессе поиска; топ причина: {top[0]}"
                 )
 
     return warnings
