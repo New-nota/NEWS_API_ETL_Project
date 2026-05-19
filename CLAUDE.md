@@ -45,19 +45,22 @@ docker compose up --build
 3. Upsert into `request_ai_report` keyed by `search_request_id`.
 4. **Best-effort:** any Mistral or DB failure inside this step is logged but does not fail the search request — articles are still loaded and the request still ends `success`. Set `AI_SUMMARY_ENABLED=false` to skip entirely.
 
-**Schema creation lives in `src/db.py`** as `create_*_table()` functions. `main.py:init_all_tables` orchestrates them and `_ensure_runtime_schema` validates required tables exist before each run. When adding a new table:
-1. Add `create_X_table()` in `src/db.py`
-2. Re-export it from `src/__init__.py`
-3. Call it from `init_all_tables` in `main.py`
-4. Add the table name to `required_tables` in `_ensure_runtime_schema`
+**Database layer is SQLAlchemy 2.x ORM** on top of psycopg2-binary (driver only — no direct `import psycopg2` in the codebase). Engine cache + session factory live in `src/db.py`. Declarative models live in `src/models.py` (one class per table). Use `from src.db import get_session` for read/write work; use `engine_for(db_name)` for raw `text()` DDL (triggers, ALTER migrations, CREATE DATABASE).
+
+**Schema creation lives in `src/db.py`** as `create_*_table()` functions that call `Base.metadata.tables["X"].create(engine, checkfirst=True)`. Triggers and idempotent migrations are run as raw `text()` afterwards. `main.py:init_all_tables` orchestrates them and `_ensure_runtime_schema` validates required tables exist before each run. When adding a new table:
+1. Define the model in `src/models.py`
+2. Add `create_X_table()` in `src/db.py` (call `_create_table("table_name")`; add trigger/migration DDL via raw `text()` if needed)
+3. Re-export it from `src/__init__.py`
+4. Call it from `init_all_tables` in `main.py`
+5. Add the table name to `required_tables` in `_ensure_runtime_schema`
 
 ## Non-obvious behaviors / gotchas
 
 - **`pyproject.toml` must be BOM-free.** A UTF-8 BOM at the start breaks pytest's TOML parser silently with a misleading error. New TOML files: write without BOM.
-- **`db.py` has special handling for non-UTF8 libpq errors** on localized Windows installs (`_decode_non_utf8_error` tries cp1251/cp866). Do not replace it with a naive `str(exc)` — it will surface mojibake instead of a real error message.
+- **`db.py` has special handling for non-UTF8 libpq errors** on localized Windows installs (`_decode_non_utf8_error` tries cp1251/cp866, wrapped around `engine.connect()` / `sessionmaker()`). Do not replace it with a naive `str(exc)` — it will surface mojibake instead of a real error message. SQLAlchemy passes the underlying psycopg2 `UnicodeDecodeError` through unwrapped, so the `try/except UnicodeDecodeError` in `_connect` / `get_session` is what catches it.
 - **`NEWS_DB` vs `DB_NEWS` mismatch:** `config/config.py` reads `NEWS_DB`, but `docker-compose.yml` references `${DB_NEWS:-...}`. Known inconsistency — don't "fix" it without verifying the deploy story.
 - **`docker-compose.yml` overrides `DB_HOST: localhost` for the app container**, which doesn't reach the `db` service. Pre-existing — don't change without confirming.
-- **`request_ai_report.promt_version`** is misspelled (missing 'p'). Schema column is `promt_version`; the Python field is `prompt_version`. The mapping happens in `load_ai_report`. Don't rename either side without coordinating.
+- **`request_ai_report.promt_version`** is misspelled (missing 'p'). Schema column is `promt_version`; the Python field is `prompt_version`. The mapping happens in `src/models.py` (`mapped_column("promt_version", ...)`). In `pg_insert(RequestAiReport).values(...)` and `stmt.excluded.*` you must use the **DB column name** (`promt_version`), not the Python attr (`prompt_version`). Don't rename either side without coordinating.
 - **Debug pipeline rewrites disk on every page** with timestamped filenames — the user inspects these manually. Don't add cleanup logic.
 - **Tests in `tests/test_pipeline.py` monkeypatch `pipeline.make_extract_web` etc.** Stubs must accept the `news_api_key` kwarg even if unused, because the pipeline always passes it.
 

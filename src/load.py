@@ -1,15 +1,16 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 from pathlib import Path
 from typing import Any
 
-from psycopg2.extras import Json
-
-from config.config import settings
+from sqlalchemy import func
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.orm import Session
 
 from .ai.schemas import SummaryResponse
-from .db import get_cursor
+from .db import get_session
+from .models import Article, BadNewsBears, RequestAiReport, RequestStats, UserNews
 
 BASE_DIR = (Path(__file__).resolve().parent.parent) / "data" / "clean"
 
@@ -25,104 +26,76 @@ def load_news(clean_news: str, max_rows: int | None = None) -> int:
     if not isinstance(data, list) or not data:
         return 0
 
-    query = """
-        INSERT INTO bad_news_bears (
-            language,
-            key_word,
-            author,
-            title,
-            description,
-            url,
-            published_at,
-            fetched_at
-        )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-        ON CONFLICT (url) DO NOTHING
-    """
-
     rows = data if max_rows is None else data[:max_rows]
 
     loaded_count = 0
-    with get_cursor(settings.news_db) as (conn, cur):
+    with get_session() as session:
         for news in rows:
-            cur.execute(
-                query,
-                (
-                    news["language"],
-                    news["key_word"],
-                    news["author"],
-                    news["title"],
-                    news["description"],
-                    news["url"],
-                    news["published_at"],
-                    news["fetched_at"],
-                ),
+            stmt = (
+                pg_insert(BadNewsBears)
+                .values(
+                    language=news["language"],
+                    key_word=news["key_word"],
+                    author=news["author"],
+                    title=news["title"],
+                    description=news["description"],
+                    url=news["url"],
+                    published_at=news["published_at"],
+                    fetched_at=news["fetched_at"],
+                )
+                .on_conflict_do_nothing(index_elements=[BadNewsBears.url])
             )
-            if cur.rowcount == 1:
+            result = session.execute(stmt)
+            if result.rowcount == 1:
                 loaded_count += 1
-        conn.commit()
 
     return loaded_count
 
 
-def upsert_article(cur, article: dict[str, Any]) -> int:
-    query = """
-        INSERT INTO articles (
-            url,
-            source_name,
-            author,
-            title,
-            description,
-            published_at
-        )
-        VALUES (%s, %s, %s, %s, %s, %s)
-        ON CONFLICT (url) DO UPDATE
-        SET
-            source_name = EXCLUDED.source_name,
-            author = EXCLUDED.author,
-            title = EXCLUDED.title,
-            description = EXCLUDED.description,
-            published_at = EXCLUDED.published_at
-        RETURNING id
-    """
-
-    cur.execute(
-        query,
-        (
-            article["url"],
-            article.get("source_name"),
-            article["author"],
-            article["title"],
-            article["description"],
-            article["published_at"],
-        ),
+def upsert_article(session: Session, article: dict[str, Any]) -> int:
+    stmt = pg_insert(Article).values(
+        url=article["url"],
+        source_name=article.get("source_name"),
+        author=article["author"],
+        title=article["title"],
+        description=article["description"],
+        published_at=article["published_at"],
     )
-    row = cur.fetchone()
-    return row["id"]
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[Article.url],
+        set_={
+            "source_name": stmt.excluded.source_name,
+            "author": stmt.excluded.author,
+            "title": stmt.excluded.title,
+            "description": stmt.excluded.description,
+            "published_at": stmt.excluded.published_at,
+        },
+    ).returning(Article.id)
+
+    return session.execute(stmt).scalar_one()
 
 
 def load_user_news(
-    cur,
+    session: Session,
     user_id: int,
     search_request_id: int,
     article_id: int,
     keyword: str,
     fetched_at: str,
 ) -> int:
-    query = """
-        INSERT INTO user_news (
-            user_id,
-            search_request_id,
-            article_id,
-            keyword,
-            fetched_at
+    stmt = (
+        pg_insert(UserNews)
+        .values(
+            user_id=user_id,
+            search_request_id=search_request_id,
+            article_id=article_id,
+            keyword=keyword,
+            fetched_at=fetched_at,
         )
-        VALUES (%s, %s, %s, %s, %s)
-        ON CONFLICT DO NOTHING
-    """
-
-    cur.execute(query, (user_id, search_request_id, article_id, keyword, fetched_at))
-    return cur.rowcount
+        .on_conflict_do_nothing()
+    )
+    result = session.execute(stmt)
+    return result.rowcount or 0
 
 
 def _extract_prime_reasons(stats: dict[str, Any]) -> dict[str, Any]:
@@ -132,107 +105,77 @@ def _extract_prime_reasons(stats: dict[str, Any]) -> dict[str, Any]:
 
 
 def load_request_stats(search_request_id: int, stats: dict[str, Any]) -> None:
-    query = """
-        INSERT INTO request_stats (
-            search_request_id,
-            income_articles,
-            accepted_articles,
-            rejected_articles,
-            reasons_counts,
-            prime_reasons
-        )
-        VALUES (%s, %s, %s, %s, %s, %s)
-        ON CONFLICT (search_request_id) DO UPDATE
-        SET
-            income_articles = EXCLUDED.income_articles,
-            accepted_articles = EXCLUDED.accepted_articles,
-            rejected_articles = EXCLUDED.rejected_articles,
-            reasons_counts = EXCLUDED.reasons_counts,
-            prime_reasons = EXCLUDED.prime_reasons
-    """
+    stmt = pg_insert(RequestStats).values(
+        search_request_id=search_request_id,
+        income_articles=int(stats.get("income_articles", 0)),
+        accepted_articles=int(stats.get("accepted_articles", 0)),
+        rejected_articles=int(stats.get("rejected_articles", 0)),
+        reasons_counts=stats.get("reasons_counts", {}),
+        prime_reasons=_extract_prime_reasons(stats),
+    )
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[RequestStats.search_request_id],
+        set_={
+            "income_articles": stmt.excluded.income_articles,
+            "accepted_articles": stmt.excluded.accepted_articles,
+            "rejected_articles": stmt.excluded.rejected_articles,
+            "reasons_counts": stmt.excluded.reasons_counts,
+            "prime_reasons": stmt.excluded.prime_reasons,
+        },
+    )
 
-    with get_cursor(settings.news_db) as (conn, cur):
-        cur.execute(
-            query,
-            (
-                search_request_id,
-                int(stats.get("income_articles", 0)),
-                int(stats.get("accepted_articles", 0)),
-                int(stats.get("rejected_articles", 0)),
-                Json(stats.get("reasons_counts", {})),
-                Json(_extract_prime_reasons(stats)),
-            ),
-        )
-        conn.commit()
+    with get_session() as session:
+        session.execute(stmt)
 
 
 def load_ai_report(search_request_id: int, summary: SummaryResponse) -> None:
-    query = """
-        INSERT INTO request_ai_report (
-            search_request_id,
-            status,
-            error_text,
-            model_provider,
-            model_name,
-            news_count,
-            summary,
-            main_conclusions,
-            sentiment_label,
-            sentiment_score,
-            sentiment_distribution,
-            main_topics,
-            highlight,
-            data_quality_warnings,
-            promt_version,
-            input_tokens,
-            output_tokens,
-            total_tokens
-        )
-        VALUES (%s, 'success', NULL, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        ON CONFLICT (search_request_id) DO UPDATE
-        SET
-            status = 'success',
-            error_text = NULL,
-            model_provider = EXCLUDED.model_provider,
-            model_name = EXCLUDED.model_name,
-            news_count = EXCLUDED.news_count,
-            summary = EXCLUDED.summary,
-            main_conclusions = EXCLUDED.main_conclusions,
-            sentiment_label = EXCLUDED.sentiment_label,
-            sentiment_score = EXCLUDED.sentiment_score,
-            sentiment_distribution = EXCLUDED.sentiment_distribution,
-            main_topics = EXCLUDED.main_topics,
-            highlight = EXCLUDED.highlight,
-            data_quality_warnings = EXCLUDED.data_quality_warnings,
-            promt_version = EXCLUDED.promt_version,
-            input_tokens = EXCLUDED.input_tokens,
-            output_tokens = EXCLUDED.output_tokens,
-            total_tokens = EXCLUDED.total_tokens
-    """
+    stmt = pg_insert(RequestAiReport).values(
+        search_request_id=search_request_id,
+        status="success",
+        error_text=None,
+        model_provider=summary.model_provider,
+        model_name=summary.model_name,
+        news_count=summary.articles_count,
+        summary=summary.summary,
+        main_conclusions=summary.main_conclusions,
+        sentiment_label=summary.sentiment_label,
+        sentiment_score=summary.sentiment_score,
+        sentiment_distribution=summary.sentiment_distribution.model_dump(),
+        main_topics=summary.main_topics,
+        highlight=summary.highlight.model_dump(),
+        data_quality_warnings=summary.data_quality_warnings,
+        # DB column is misspelled ("promt_version"); Python attr is "prompt_version".
+        promt_version=summary.prompt_version,
+        input_tokens=summary.usage.input_tokens,
+        output_tokens=summary.usage.output_tokens,
+        total_tokens=summary.usage.total_tokens,
+    )
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[RequestAiReport.search_request_id],
+        set_={
+            "status": "success",
+            "error_text": None,
+            "model_provider": stmt.excluded.model_provider,
+            "model_name": stmt.excluded.model_name,
+            "news_count": stmt.excluded.news_count,
+            "summary": stmt.excluded.summary,
+            "main_conclusions": stmt.excluded.main_conclusions,
+            "sentiment_label": stmt.excluded.sentiment_label,
+            "sentiment_score": stmt.excluded.sentiment_score,
+            "sentiment_distribution": stmt.excluded.sentiment_distribution,
+            "main_topics": stmt.excluded.main_topics,
+            "highlight": stmt.excluded.highlight,
+            "data_quality_warnings": stmt.excluded.data_quality_warnings,
+            # Schema column "promt_version" (sic) — Python attr is "prompt_version".
+            "promt_version": stmt.excluded.promt_version,
+            "input_tokens": stmt.excluded.input_tokens,
+            "output_tokens": stmt.excluded.output_tokens,
+            "total_tokens": stmt.excluded.total_tokens,
+        },
+    )
 
-    with get_cursor(settings.news_db) as (conn, cur):
-        cur.execute(
-            query,
-            (
-                search_request_id,
-                summary.model_provider,
-                summary.model_name,
-                summary.articles_count,
-                summary.summary,
-                Json(summary.main_conclusions),
-                summary.sentiment_label,
-                summary.sentiment_score,
-                Json(summary.sentiment_distribution.model_dump()),
-                Json(summary.main_topics),
-                Json(summary.highlight.model_dump()),
-                Json(summary.data_quality_warnings),
-                summary.prompt_version,
-                summary.usage.input_tokens,
-                summary.usage.output_tokens,
-                summary.usage.total_tokens,
-            ),
-        )
-        conn.commit()
+    with get_session() as session:
+        session.execute(stmt)
 
 
 def load_failed_ai_report(
@@ -243,39 +186,33 @@ def load_failed_ai_report(
     model_provider: str | None = None,
     prompt_version: str | None = None,
 ) -> None:
-    query = """
-        INSERT INTO request_ai_report (
-            search_request_id,
-            status,
-            error_text,
-            model_provider,
-            news_count,
-            promt_version
-        )
-        VALUES (%s, 'failed', %s, %s, %s, COALESCE(%s, 'v1'))
-        ON CONFLICT (search_request_id) DO UPDATE
-        SET
-            status = 'failed',
-            error_text = EXCLUDED.error_text,
-            model_provider = EXCLUDED.model_provider,
-            news_count = EXCLUDED.news_count,
-            promt_version = COALESCE(EXCLUDED.promt_version, request_ai_report.promt_version)
-    """
-
     truncated_error = (error_text or "")[:2000]
 
-    with get_cursor(settings.news_db) as (conn, cur):
-        cur.execute(
-            query,
-            (
-                search_request_id,
-                truncated_error,
-                model_provider,
-                news_count,
-                prompt_version,
+    stmt = pg_insert(RequestAiReport).values(
+        search_request_id=search_request_id,
+        status="failed",
+        error_text=truncated_error,
+        model_provider=model_provider,
+        news_count=news_count,
+        # DB column is "promt_version" (sic); Python attr is "prompt_version".
+        promt_version=prompt_version if prompt_version is not None else "v1",
+    )
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[RequestAiReport.search_request_id],
+        set_={
+            "status": "failed",
+            "error_text": stmt.excluded.error_text,
+            "model_provider": stmt.excluded.model_provider,
+            "news_count": stmt.excluded.news_count,
+            "promt_version": func.coalesce(
+                stmt.excluded.promt_version,
+                RequestAiReport.prompt_version,
             ),
-        )
-        conn.commit()
+        },
+    )
+
+    with get_session() as session:
+        session.execute(stmt)
 
 
 def load_web_pipeline(
@@ -295,15 +232,15 @@ def load_web_pipeline(
         rows = clean_data
 
     loaded_count = 0
-    with get_cursor(settings.news_db) as (conn, cur):
+    with get_session() as session:
         for article in rows:
             keyword = article["key_word"]
             fetched_at = article["fetched_at"]
 
-            article_id = upsert_article(cur, article)
-            inserted = load_user_news(cur, user_id, search_request_id, article_id, keyword, fetched_at)
+            article_id = upsert_article(session, article)
+            inserted = load_user_news(
+                session, user_id, search_request_id, article_id, keyword, fetched_at
+            )
             loaded_count += inserted
-
-        conn.commit()
 
     return loaded_count

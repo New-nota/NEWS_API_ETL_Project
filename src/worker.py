@@ -3,9 +3,10 @@
 import logging
 import time
 
-from config.config import settings
+from sqlalchemy import func, update
 
-from .db import claim_next_search_request, get_cursor
+from .db import claim_next_search_request, get_session
+from .models import SearchRequest
 from .pipeline import run_pipeline_for_web_user
 from .user_news_api_key import get_decrypted_news_api_key_for_user
 
@@ -17,37 +18,29 @@ logger = logging.getLogger(__name__)
 
 
 def mark_as_success(search_request_id: int) -> None:
-    query = """
-        UPDATE search_requests
-        SET
-            status = 'success',
-            finished_at = NOW(),
-            error_text = NULL
-        WHERE id = %s
-    """
+    stmt = (
+        update(SearchRequest)
+        .where(SearchRequest.id == search_request_id)
+        .values(status="success", finished_at=func.now(), error_text=None)
+    )
 
-    with get_cursor(settings.news_db) as (conn, cur):
-        cur.execute(query, (search_request_id,))
-        if cur.rowcount != 1:
+    with get_session() as session:
+        result = session.execute(stmt)
+        if result.rowcount != 1:
             logger.warning("Search request %s was not marked as success", search_request_id)
-        conn.commit()
 
 
 def mark_as_error(search_request_id: int, error_text: str) -> None:
-    query = """
-        UPDATE search_requests
-        SET
-            status = 'failed',
-            finished_at = NOW(),
-            error_text = %s
-        WHERE id = %s
-    """
+    stmt = (
+        update(SearchRequest)
+        .where(SearchRequest.id == search_request_id)
+        .values(status="failed", finished_at=func.now(), error_text=error_text[:2000])
+    )
 
-    with get_cursor(settings.news_db) as (conn, cur):
-        cur.execute(query, (error_text[:2000], search_request_id))
-        if cur.rowcount != 1:
+    with get_session() as session:
+        result = session.execute(stmt)
+        if result.rowcount != 1:
             logger.warning("Search request %s was not marked as failed", search_request_id)
-        conn.commit()
 
 
 def one_request() -> bool:
