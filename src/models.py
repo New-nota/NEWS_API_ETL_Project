@@ -7,6 +7,7 @@ from decimal import Decimal
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     ForeignKey,
     Index,
@@ -40,6 +41,7 @@ class AppUser(Base):
     last_login_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )
+    trial_uses: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
 
 
 class SearchRequest(Base):
@@ -58,6 +60,7 @@ class SearchRequest(Base):
     limit_count: Mapped[int] = mapped_column(Integer, nullable=False)
     page_size: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False)
+    is_trial: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     error_text: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
@@ -239,13 +242,16 @@ class UsersKeys(Base):
     user_id: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey("app_users.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=False
     )
     service: Mapped[str] = mapped_column(String(50), nullable=False)
     encrypted_key: Mapped[str] = mapped_column(Text, nullable=False)
     iv: Mapped[str] = mapped_column(Text, nullable=False)
     auth_tag: Mapped[str] = mapped_column(Text, nullable=False)
     key_last4: Mapped[str] = mapped_column(String(4), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, server_default="pending_validation")
+    validation_error: Mapped[str | None] = mapped_column(Text, nullable=False)
+    validated_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
     uploaded_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )
@@ -255,6 +261,9 @@ class UsersKeys(Base):
 
     __table_args__ = (
         UniqueConstraint("user_id", "service", name="users_keys_user_id_service_key"),
+        CheckConstraint(
+            "status IN ('pending_validation', 'validating', 'valid', 'invalid', 'exhausted')", name="users_key_status_check",
+        ),
     )
 
 

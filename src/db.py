@@ -1,11 +1,13 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import locale
 import re
 from contextlib import contextmanager
+
 from typing import Iterator, Sequence
 
-from sqlalchemy import URL, Engine, create_engine, select, text
+from datetime import datetime, timedelta, timezone
+from sqlalchemy import URL, Engine, and_, or_, create_engine, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from config.config import settings
@@ -31,10 +33,10 @@ def _decode_non_utf8_error(exc: UnicodeDecodeError) -> str:
         return str(exc)
 
     encodings_to_try = []
-    preferred = locale.getpreferredencoding(False)
+    preferred = locale.getpreferredencoding(False) # система
     if preferred:
         encodings_to_try.append(preferred)
-    encodings_to_try.extend(["cp1251", "cp866", "latin1"])
+    encodings_to_try.extend(["cp1251", "cp866", "latin1"]) # иные кодировки
 
     seen: set[str] = set()
     for encoding in encodings_to_try:
@@ -58,7 +60,7 @@ def _build_connection_hint(decoded_message: str, db_name: str) -> str:
     ):
         return (
             f"Database '{db_name}' does not exist. "
-            "Run `python main.py --init-only` once or add `--bootstrap` to the run command."
+            "Запусти `python main.py --init-only` один раз или используй `--bootstrap` чтобы запустить команду."
         )
 
     if (
@@ -67,18 +69,18 @@ def _build_connection_hint(decoded_message: str, db_name: str) -> str:
     ):
         return (
             "Authentication failed. "
-            "Check DB_HOST/DB_PORT/DB_USER/DB_PASSWORD and PostgreSQL `pg_hba.conf`."
+            "Проверь DB_HOST/DB_PORT/DB_USER/DB_PASSWORD и PostgreSQL `pg_hba.conf`."
         )
 
     if "pg_hba" in lower_message:
         return (
-            "Connection rejected by pg_hba.conf. "
-            "Allow the host/user/database combination or use a matching auth method."
+            "Подключение отклонено pg_hba.conf. "
+            "Проверь host/user/database комбинацию или используй соответсвующий метод аутентификации"
         )
 
     return (
-        "Connection failed with a non-UTF8 server message. "
-        "Check DB settings and PostgreSQL server logs."
+        "Подключение не удалось, сообщение сервера было не в UTF-8."
+        "Проверь настройки базы и логи PostgreSQL"
     )
 
 
@@ -239,8 +241,8 @@ def create_database_if_not_exists(db_name: str) -> None:
         # `CREATE DATABASE` cannot be parameterized; reject anything that
         # would otherwise require manual quoting/escaping.
         raise ValueError(
-            f"Refusing to create database with unsupported name: {db_name!r}. "
-            "Allowed characters: letters, digits, underscore."
+            f"Отказано в создании базы данных изза неподобающего имени: {db_name!r}. "
+            "Разрещенные символы: латиница, цифры, нижнее подчеркивание."
         )
 
     with _connect(engine_for(settings.db_admin_db), settings.db_admin_db, autocommit=True) as conn:
@@ -257,6 +259,10 @@ def _create_table(table_attr: str) -> None:
 
 def create_search_requests_table() -> None:
     _create_table("search_requests")
+    with _connect(_news_engine(), settings.news_db) as conn:
+        conn.execute(text(
+            "ALTER TABLE search_requests ADD COLUMN IF NOT EXISTS is_trial BOOLEAN NOT NULL DEFAULT FALSE"
+        ))
 
 
 def create_articles_table() -> None:
@@ -265,7 +271,7 @@ def create_articles_table() -> None:
 
 def create_user_news_table() -> None:
     _create_table("user_news")
-
+    
 
 def create_request_stats_table() -> None:
     _create_table("request_stats")
@@ -336,6 +342,10 @@ def create_request_ai_report_table() -> None:
 
 def create_app_users_table() -> None:
     _create_table("app_users")
+    with _connect(_news_engine(), settings.news_db) as conn:
+        conn.execute(text(
+            "ALTER TABLE app_users ADD COLUMN IF NOT EXISTS trial_uses Integer not null Default 0"
+        ))
 
 
 def create_news_tables() -> None:
@@ -344,7 +354,16 @@ def create_news_tables() -> None:
 
 def create_users_keys_table() -> None:
     _create_table("users_keys")
-
+    migrations = [
+        "ALTER TABLE users_keys ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending_validation'",
+        "ALTER TABLE users_keys ADD COLUMN IF NOT EXISTS validation_error TEXT",
+        "ALTER TABLE users_keys ADD COLUMN IF NOT EXISTS validated_at TIMESTAMPTZ",
+    ]
+    add_status_check = """
+    ALTER TABLE users_keys DROP CONSTRAINT IF EXISTS users_keys_status_check;
+    ALTER TABLE users_keys ADD CONSTRAINT users_keys_status_check
+        CHECK (status IN ('pending_validation', 'validating', 'valid', 'invalid', 'exhausted'));
+    """
     trigger_function = """
         CREATE OR REPLACE FUNCTION set_users_keys_updated_at()
         RETURNS TRIGGER AS $$
@@ -353,11 +372,10 @@ def create_users_keys_table() -> None:
             RETURN NEW;
         END;
         $$ LANGUAGE plpgsql;
-    """
-
+        """
     trigger = """
         DO $$
-        BEGIN
+        BEGIN 
             IF NOT EXISTS (
                 SELECT 1 FROM pg_trigger WHERE tgname = 'trg_users_keys_updated_at'
             ) THEN
@@ -367,9 +385,14 @@ def create_users_keys_table() -> None:
                 EXECUTE FUNCTION set_users_keys_updated_at();
             END IF;
         END $$;
-    """
-
+        """
     with _connect(_news_engine(), settings.news_db) as conn:
+        for m in migrations:
+            conn.execute(text(m))
+        conn.execute(text(add_status_check))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS users_keys_status_idx ON users_keys (status)"
+        ))
         conn.execute(text(trigger_function))
         conn.execute(text(trigger))
 
@@ -377,31 +400,56 @@ def create_users_keys_table() -> None:
 def claim_next_search_request() -> dict | None:
     # CTE-based atomic claim: SELECT ... FOR UPDATE SKIP LOCKED + UPDATE in
     # one statement so multiple workers can run safely against the queue.
-    query = text(
-        """
-        WITH next_request AS (
-            SELECT id
-            FROM search_requests
-            WHERE status = 'queued'
-            ORDER BY created_at
-            FOR UPDATE SKIP LOCKED
-            LIMIT 1
-        )
-        UPDATE search_requests AS sr
-        SET
-            status = 'running',
-            started_at = NOW(),
-            error_text = NULL
-        FROM next_request
-        WHERE sr.id = next_request.id
-        RETURNING sr.id, sr.user_id, sr.keyword, sr.language, sr.limit_count, sr.page_size
-        """
-    )
+    with get_session() as session:
+        request = session.execute(
+            select(SearchRequest).where(SearchRequest.status == "queued").order_by(SearchRequest.created_at).limit(1).with_for_update(skip_locked=True)
+        ).scalar_one_or_none()
+        if request is None:
+            return None
+        request.status = "running"
+        request.started_at = datetime.now(timezone.utc)
+        request.error_text = None
+        session.flush()
 
-    with _connect(_news_engine(), settings.news_db) as conn:
-        row = conn.execute(query).mappings().first()
-        return dict(row) if row else None
+        return {
+            "id" : request.id,
+            "user_id": request.user_id,
+            "keyword" : request.keyword,
+            "language": request.language,
+            "limit_count": request.limit_count,
+            "page_size": request.page_size,
+            "is_trial": request.is_trial
+        }
 
+
+def claim_pending_key_validation() -> dict | None:
+    # подхватывает и pending и зависшие
+    # в случае падения воркера триггер updated_at покажет что просшло > 10 мин 
+    stale_threshold = datetime.now(timezone.utc) - timedelta(minutes=10) 
+    with get_session() as session:
+        key = session.execute(select(UsersKeys).where(or_(UsersKeys.status == "pending_validation", and_(UsersKeys.status == "validating", UsersKeys.updated_at < stale_threshold,)))
+                              .order_by(UsersKeys.id).limit(1).with_for_update(skip_locked=True)).scalar_one_or_none()
+        if key is None:
+            return None
+        key.status = "validating"
+        session.flush()
+
+        return {
+            "id": key.id,
+            "user_id": key.user_id,
+            "encrypted_key": key.encrypted_key,
+            "iv": key.iv, 
+            "auth_tag": key.auth_tag,
+        }
+def mark_key_validation_result(key_id: int, status: str, error: str | None) -> None:
+    with get_session() as session:
+        key = session.get(UsersKeys, key_id)
+        if key is None:
+            return
+        key.status = status
+        key.validation_error = error
+        if status != "pending_validation":
+            key.validated_at = datetime.now(timezone.utc)
 
 def search_request_exists(search_request_id: int) -> bool:
     with get_session() as session:
@@ -477,4 +525,7 @@ __all__ = [
     "search_request_belongs_to_user",
     "search_request_exists",
     "table_exists",
+    "claim_panding_key_validation",
+    "mark_key_validation_result"
 ]
+
